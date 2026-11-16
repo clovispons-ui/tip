@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TIP - Administration</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- ÉCRAN DE CONNEXION PROTÉGÉ PAR MOT DE PASSE -->
+  <div id="login-modal" class="login-overlay">
+    <div class="login-box">
+      <div style="font-size: 3rem; margin-bottom: 0.5rem;">🔒</div>
+      <h2>Accès Organisateur - TIP</h2>
+      <p>Veuillez saisir le mot de passe administrateur</p>
+      <form onsubmit="handleAdminLogin(event)" style="display:flex; flex-direction:column; gap:0.85rem;">
+        <input type="password" id="admin-pwd-input" placeholder="Mot de passe..." required autofocus />
+        <div id="login-error" style="color:var(--accent-danger); font-size:0.85rem; display:none;">Mot de passe incorrect.</div>
+        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:0.75rem;">Déverrouiller l'interface Admin</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL DE CHOIX D'INITIALISATION DU SPORT -->
+  <div id="init-modal" class="login-overlay hidden">
+    <div class="login-box" style="max-width: 500px; text-align: left;">
+      <div style="font-size: 2.5rem; text-align: center; margin-bottom: 0.5rem;">🎲</div>
+      <h2 style="text-align: center; margin-bottom: 0.35rem;">Initialiser ce sport</h2>
+      <p style="text-align: center; color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
+        Choisissez comment générer le calendrier et les poules :
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 0.9rem;">
+        <button class="btn btn-primary" style="justify-content: flex-start; padding: 1rem; text-align: left;" onclick="confirmInitMode('complete')">
+          <div>
+            <div style="font-size: 1.05rem; font-weight: 800; margin-bottom: 0.25rem;">⚡ Compléter l'existant</div>
+            <div style="font-size: 0.82rem; font-weight: normal; opacity: 0.9; line-height: 1.35;">
+              Conserve vos poules, matchs et scores déjà saisis, et génère uniquement ce qui manque pour les équipes actives.
+            </div>
+          </div>
+        </button>
+
+        <button class="btn btn-danger" style="justify-content: flex-start; padding: 1rem; text-align: left;" onclick="confirmInitMode('reset')">
+          <div>
+            <div style="font-size: 1.05rem; font-weight: 800; margin-bottom: 0.25rem;">🎲 Tout supprimer & Tirage aléatoire</div>
+            <div style="font-size: 0.82rem; font-weight: normal; opacity: 0.9; line-height: 1.35;">
+              Efface tous les matchs et poules actuels de ce sport pour repartir à zéro avec un tirage aléatoire complet.
+            </div>
+          </div>
+        </button>
+
+        <button class="btn" style="width: 100%; justify-content: center; margin-top: 0.5rem;" onclick="closeInitModal()">
+          Annuler
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE CHANGEMENT DE MOT DE PASSE -->
+  <div id="pwd-modal" class="login-overlay hidden">
+    <div class="login-box" style="max-width: 440px; text-align: left;">
+      <div style="font-size: 2.5rem; text-align: center; margin-bottom: 0.5rem;">🔑</div>
+      <h2 style="text-align: center; margin-bottom: 0.35rem;">Changer le mot de passe</h2>
+      <p style="text-align: center; color: var(--text-muted); font-size: 0.88rem; margin-bottom: 1.25rem;">
+        Le mot de passe sera sécurisé et haché en SHA-256 (jamais stocké en clair).
+      </p>
+
+      <form onsubmit="handlePasswordChangeSubmit(event)" style="display:flex; flex-direction:column; gap:0.85rem;">
+        <div>
+          <label style="display:block; font-size:0.85rem; color:var(--text-muted); margin-bottom:0.25rem;">Nouveau mot de passe :</label>
+          <input type="password" id="new-pwd-input" required minlength="3" placeholder="Nouveau mot de passe..." style="width:100%;" />
+        </div>
+        <div>
+          <label style="display:block; font-size:0.85rem; color:var(--text-muted); margin-bottom:0.25rem;">Confirmez le nouveau mot de passe :</label>
+          <input type="password" id="confirm-pwd-input" required minlength="3" placeholder="Confirmez le mot de passe..." style="width:100%;" />
+        </div>
+        <div id="pwd-change-error" style="color:var(--accent-danger); font-size:0.85rem; display:none;"></div>
+        <div id="pwd-change-success" style="color:var(--accent-success); font-size:0.85rem; display:none;"></div>
+
+        <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+          <button type="submit" class="btn btn-primary" style="flex:1; justify-content:center;">Enregistrer</button>
+          <button type="button" class="btn" onclick="closePasswordChangeModal()">Annuler</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- BARRE SUPÉRIEURE ADMIN - HORLOGE CENTRÉE -->
+  <header class="top-bar">
+    <div class="brand-title">
+      <h1>🛠️ TIP - Administration</h1>
+    </div>
+
+    <div id="admin-clock" class="clock-box">00:00:00</div>
+
+    <div class="header-actions">
+      <button id="theme-toggle-btn" class="header-btn" onclick="toggleTheme()" title="Basculer entre le mode clair et le mode nuit">
+        <span class="btn-icon">☀️</span>
+        <span class="btn-text">Thème</span>
+      </button>
+      <button class="header-btn" onclick="openPasswordChangeModal()" title="Modifier le mot de passe administrateur">
+        <span class="btn-icon">🔑</span>
+        <span class="btn-text">Mot de passe</span>
+      </button>
+      <a href="index.html" target="_blank" class="header-btn btn-projector" title="Ouvrir l'affichage projeté dans un nouvel onglet">
+        <span class="btn-icon">📺</span>
+        <span class="btn-text">Vidéoprojecteur</span>
+      </a>
+      <button class="header-btn btn-reset" onclick="confirmGlobalReset()" title="Réinitialiser tous les sports à zéro">
+        <span class="btn-icon">🗑️</span>
+        <span class="btn-text">Réinitialiser</span>
+      </button>
+      <button class="header-btn btn-logout" onclick="handleAdminLogout()" title="Verrouiller l'accès administrateur">
+        <span class="btn-icon">🔒</span>
+        <span class="btn-text">Déconnexion</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="admin-container">
+    <!-- VUE 1 : TABLEAU DE BORD GÉNÉRAL (ACCUEIL ADMIN) -->
+    <div id="dashboard-view">
+      <!-- Bannière Mode Pause Repas / Show POM-POM -->
+      <div class="admin-section" style="background: linear-gradient(135deg, rgba(250, 204, 21, 0.12) 0%, rgba(0,0,0,0.4) 100%); border: 2px solid #facc15;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+          <div>
+            <h3 style="font-size:1.35rem; color:#facc15; display:flex; align-items:center; gap:0.5rem;">
+              <span>📣</span> Mode Pause Repas & Show POM-POM (13h15)
+            </h3>
+            <p style="font-size:0.9rem; color:var(--text-muted); margin-top:0.25rem;">
+              Active un écran spécial jaune & noir <b>"Show POMPOM 13h15"</b> sur le vidéoprojecteur à la place du calendrier des matchs, tout en conservant le classement des filières lisible.
+            </p>
+          </div>
+          <button id="pompom-toggle-btn" class="btn btn-lg" onclick="togglePompomMode()">
+            <!-- Rempli dynamiquement par JS -->
+          </button>
+        </div>
+      </div>
+
+      <!-- Sélection du sport -->
+      <div class="admin-section">
+        <div class="panel-header">
+          <h2>🏟️ Sélectionnez un Sport à Gérer</h2>
+          <span style="color:var(--text-muted); font-size:0.9rem;">Configurez les équipes, initialisez les poules, assignez les arbitres et saisissez les scores en direct.</span>
+        </div>
+        <div id="sports-cards-grid" class="sports-grid">
+          <!-- Injecté par JS -->
+        </div>
+      </div>
+
+      <!-- Résumé du Classement Général côté Admin -->
+      <div class="admin-section">
+        <div class="panel-header">
+          <h2>🏆 Aperçu du Classement Général des Filières (TIP)</h2>
+          <span style="font-size:0.85rem; color:var(--text-muted);">
+            Barème : 8ème (1 pt) • Quart (2 pts) • Demi (4 pts) • Finale (5 pts) • Vainqueur (7 pts) • Poules : 3G / 2N / 1P
+          </span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th style="width:50px;">Rang</th>
+                <th>Filière</th>
+                <th>Couleur</th>
+                <th>⚽ Foot</th>
+                <th>🏀 Basket</th>
+                <th>🏐 Volley</th>
+                <th>🏃 Relais</th>
+                <th>🤾 Dodgeball</th>
+                <th style="text-align:right;">Total Points</th>
+              </tr>
+            </thead>
+            <tbody id="admin-standings-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VUE 2 : PAGE DÉTAILLÉE D'UN SPORT -->
+    <div id="sport-detail-view" class="hidden">
+      <div style="margin-bottom: 1.25rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+        <button class="btn" onclick="backToDashboard()">⬅️ Retour au tableau de bord</button>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+          <button class="btn" onclick="toggleSettingsPanel()">⚙️ Paramètres & Équipes engagées</button>
+          <button class="btn btn-primary" onclick="handleInitializeSport()">🎲 Initialiser (Tirage aléatoire)</button>
+          <button class="btn btn-success" onclick="handleExportExcel()">📥 Télécharger planning (.xls)</button>
+        </div>
+      </div>
+
+      <!-- En-tête du sport sélectionné -->
+      <div class="admin-section" id="sport-header-banner">
+        <!-- Injecté par JS -->
+      </div>
+
+      <!-- PANNEAU PARAMÈTRES (Masqué/Affiché via le bouton "Paramètres") -->
+      <div id="sport-settings-panel" class="admin-section hidden">
+        <div class="panel-header">
+          <h2>⚙️ Paramètres du Sport & Équipes Présentes</h2>
+          <button class="btn btn-sm" onclick="toggleSettingsPanel()">Fermer ✖</button>
+        </div>
+
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:1rem; margin-bottom:1.5rem; padding-bottom:1.25rem; border-bottom:1px solid var(--border-color);">
+          <div>
+            <label style="display:block; font-size:0.85rem; color:var(--text-muted); margin-bottom:0.3rem;">Heure de début</label>
+            <input type="time" id="cfg-start-time" onchange="saveSportTimingConfig()" />
+          </div>
+          <div>
+            <label style="display:block; font-size:0.85rem; color:var(--text-muted); margin-bottom:0.3rem;">Durée d'un match (minutes)</label>
+            <input type="number" id="cfg-match-duration" min="5" max="60" onchange="saveSportTimingConfig()" />
+          </div>
+          <div>
+            <label style="display:block; font-size:0.85rem; color:var(--text-muted); margin-bottom:0.3rem;">Nombre de terrains</label>
+            <input type="number" id="cfg-pitches-count" min="1" max="6" onchange="saveSportTimingConfig()" />
+          </div>
+          <div>
+            <label style="display:block; font-size:0.85rem; color:var(--text-muted); margin-bottom:0.3rem;">Noms des Terrains / Lieux (séparés par virgule)</label>
+            <input type="text" id="cfg-pitch-names" onchange="saveSportTimingConfig()" style="width:100%;" placeholder="Ex: Piste d'Athlétisme" />
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+          <div>
+            <h3 style="font-size:1.05rem;">✅ Cocher / Décocher les équipes engagées par filière</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted);">Décochez les équipes absentes avant de cliquer sur <b>"Initialiser"</b> pour recalculer les poules et l'arbre.</p>
+          </div>
+          <div style="display:flex; gap:0.5rem;">
+            <button class="btn btn-sm" onclick="setAllTeamsActive(true)">Tout cocher</button>
+            <button class="btn btn-sm" onclick="setAllTeamsActive(false)">Tout décocher</button>
+          </div>
+        </div>
+
+        <div id="teams-Checkboxes-container" class="teams-check-grid"></div>
+      </div>
+
+      <!-- SECTION GESTION & COMPOSITION MANUELLE DES POULES -->
+      <div id="pools-composition-section" class="admin-section">
+        <div class="panel-header">
+          <div>
+            <h2>🎯 Composition Manuelle des Poules & Séries</h2>
+            <span style="font-size:0.85rem; color:var(--text-muted);">
+              Composez vos poules librement, puis cliquez sur <b>"⚡ Compléter & Mettre en forme"</b> pour générer automatiquement tous les matchs et les horaires.
+            </span>
+          </div>
+          <button class="btn btn-sm" id="toggle-composer-btn" onclick="togglePoolComposer()">Masquer ▾</button>
+        </div>
+        <div id="pool-composer-content">
+          <!-- Injecté dynamiquement par renderPoolComposer() -->
+        </div>
+      </div>
+
+      <!-- BANNIÈRE ACTION : REMPLIR LES PHASES FINALES APRÈS LES POULES -->
+      <div id="knockout-action-banner-container">
+        <!-- Injecté par JS si sport initialisé -->
+      </div>
+
+      <!-- SECTION MATCHS PAR POULE (SÉPARÉS CLAIREMENT PAR POULE) -->
+      <div id="pools-matches-section" class="admin-section">
+        <div class="panel-header">
+          <h2>📋 Matchs de Poule & Classements Séparés</h2>
+          <span style="font-size:0.85rem; color:var(--text-muted);">Classements de poule grand format & calendriers dédiés</span>
+        </div>
+        <div id="poules-blocks-container" class="poules-container-admin">
+          <!-- Injecté par JS : une boîte distincte par poule avec son classement agrandi et ses matchs -->
+        </div>
+      </div>
+
+      <!-- SECTION PHASES FINALES (SÉPARÉE CLAIREMENT) -->
+      <div id="knockout-matches-section" class="admin-section">
+        <div class="panel-header">
+          <h2>🏆 Tableau des Phases Finales (Quarts, Demis & Finales)</h2>
+          <span style="font-size:0.85rem; color:var(--text-muted);">Affiché sur le vidéoprojecteur dès que les 2 équipes sont qualifiées</span>
+        </div>
+        <div id="knockout-matches-container">
+          <!-- Injecté par JS -->
+        </div>
+      </div>
+
+      <!-- SECTION ATTRIBUTION DES POINTS PAR ÉQUIPE (SANS COLONNE STATUT) -->
+      <div class="admin-section">
+        <div class="panel-header">
+          <h2>🏅 Stade Atteint & Points Gagnés par Équipe</h2>
+          <span style="font-size:0.85rem; color:var(--text-muted);">
+            Barème final : 8ème (1 pt) • Quart (2 pts) • Demi (4 pts) • Finale (5 pts) • Vainqueur (7 pts). Poules : 3 pts victoire, 2 pts nul, 1 pt défaite.
+          </span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Équipe</th>
+                <th>Filière</th>
+                <th>Stade Atteint</th>
+                <th>Points du Stade</th>
+                <th>Bonus / Ajustement</th>
+                <th style="text-align:right;">Total Équipe</th>
+              </tr>
+            </thead>
+            <tbody id="admin-stages-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+  <script>
+    let currentSportId = null;
+
+    // 1. Authentification sécurisée (SHA-256)
+    function handleAdminLogin(e) {
+      e.preventDefault();
+      const val = document.getElementById("admin-pwd-input").value;
+      if (verifyAdminPassword(val)) {
+        sessionStorage.setItem("ADMIN_AUTH_TOKEN", sha256(val + "_TIP_AUTH_OK"));
+        document.getElementById("login-modal").classList.add("hidden");
+        document.getElementById("login-error").style.display = "none";
+        document.getElementById("admin-pwd-input").value = "";
+      } else {
+        document.getElementById("login-error").style.display = "block";
+      }
+    }
+
+    function checkAuth() {
+      const token = sessionStorage.getItem("ADMIN_AUTH_TOKEN");
+      if (token) {
+        document.getElementById("login-modal").classList.add("hidden");
+      } else {
+        document.getElementById("login-modal").classList.remove("hidden");
+      }
+    }
+
+    function handleAdminLogout() {
+      sessionStorage.removeItem("ADMIN_AUTH_TOKEN");
+      document.getElementById("login-modal").classList.remove("hidden");
+    }
+
+    function openPasswordChangeModal() {
+      document.getElementById("pwd-modal").classList.remove("hidden");
+      document.getElementById("new-pwd-input").value = "";
+      document.getElementById("confirm-pwd-input").value = "";
+      document.getElementById("pwd-change-error").style.display = "none";
+      document.getElementById("pwd-change-success").style.display = "none";
+    }
+
+    function closePasswordChangeModal() {
+      document.getElementById("pwd-modal").classList.add("hidden");
+    }
+
+    function handlePasswordChangeSubmit(e) {
+      e.preventDefault();
+      const p1 = document.getElementById("new-pwd-input").value;
+      const p2 = document.getElementById("confirm-pwd-input").value;
+      const errEl = document.getElementById("pwd-change-error");
+      const succEl = document.getElementById("pwd-change-success");
+
+      if (p1 !== p2) {
+        errEl.textContent = "Les deux mots de passe ne correspondent pas.";
+        errEl.style.display = "block";
+        succEl.style.display = "none";
+        return;
+      }
+
+      const res = changeAdminPassword(p1);
+      if (res.success) {
+        sessionStorage.setItem("ADMIN_AUTH_TOKEN", sha256(p1 + "_TIP_AUTH_OK"));
+        succEl.innerHTML = "✅ Mot de passe modifié avec succès !<br/><span style='font-size:0.75rem; color:var(--text-muted);'>Empreinte SHA-256 enregistrée dans le navigateur.</span>";
+        succEl.style.display = "block";
+        errEl.style.display = "none";
+        setTimeout(() => {
+          closePasswordChangeModal();
+        }, 1500);
+      } else {
+        errEl.textContent = res.message;
+        errEl.style.display = "block";
+        succEl.style.display = "none";
+      }
+    }
+
+    // 2. Navigation
+    function openSportDetail(sportId) {
+      currentSportId = sportId;
+      document.getElementById("dashboard-view").classList.add("hidden");
+      document.getElementById("sport-detail-view").classList.remove("hidden");
+      renderSportDetail();
+    }
+
+    function backToDashboard() {
+      currentSportId = null;
+      document.getElementById("sport-detail-view").classList.add("hidden");
+      document.getElementById("dashboard-view").classList.remove("hidden");
+      renderDashboard();
+    }
+
+    function toggleSettingsPanel() {
+      const panel = document.getElementById("sport-settings-panel");
+      panel.classList.toggle("hidden");
+    }
+
+    // 3. Bascule Mode Pause Repas / Show POM-POM (13h15)
+    function togglePompomMode() {
+      const state = loadState();
+      state.pompomMode = !state.pompomMode;
+      saveState(state);
+      renderDashboard();
+    }
+
+    // 4. Rendu Dashboard
+    function renderDashboard() {
+      const state = loadState();
+
+      // Bouton Show Pom-pom
+      const pompomBtn = document.getElementById("pompom-toggle-btn");
+      if (state.pompomMode) {
+        pompomBtn.className = "btn btn-lg btn-danger";
+        pompomBtn.innerHTML = "🔴 Désactiver le Show POM-POM (Remettre les matchs)";
+      } else {
+        pompomBtn.className = "btn btn-lg btn-warning";
+        pompomBtn.innerHTML = "📣 Activer le Show POM-POM & Pause Repas (13h15)";
+      }
+
+      // Cartes de sport
+      const grid = document.getElementById("sports-cards-grid");
+      grid.innerHTML = Object.values(state.sports).map(sport => {
+        const theme = getSportTheme(sport.id);
+        const activeCount = sport.teams.filter(t => t.active).length;
+        const totalMatches = sport.matches.length;
+        const finishedMatches = sport.matches.filter(m =>
+          m.isRace ? Object.keys(m.raceResults || {}).length > 0 : (m.scoreA !== null && m.scoreB !== null && m.scoreA !== "" && m.scoreB !== "")
+        ).length;
+
+        const statusBadge = sport.initialized
+          ? `<span style="background:rgba(16,185,129,0.18); color:var(--accent-success); padding:0.25rem 0.65rem; border-radius:999px; font-size:0.8rem; font-weight:800;">${finishedMatches}/${totalMatches} matchs terminés</span>`
+          : `<span style="background:rgba(245,158,11,0.18); color:var(--accent-warning); padding:0.25rem 0.65rem; border-radius:999px; font-size:0.8rem; font-weight:800;">Non initialisé</span>`;
+
+        return `
+          <div class="sport-card" style="border-left: 6px solid ${theme.color};" onclick="openSportDetail('${sport.id}')">
+            <div class="sport-card-header">
+              <span class="sport-card-title">${sport.icon} ${sport.name}</span>
+              ${statusBadge}
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.75rem;">
+              🕒 Créneau : <b>${sport.startTime} - ${sport.endTime}</b><br/>
+              🏟️ Terrains : <b>${sport.pitchNames.join(", ")}</b><br/>
+              👥 Équipes actives : <b>${activeCount}/${sport.teams.length}</b>
+            </p>
+            <div style="font-size:0.85rem; color:${theme.color}; font-weight:800;">Gérer les poules, matchs & scores ➔</div>
+          </div>
+        `;
+      }).join("");
+
+      // Classement Général
+      const standings = computeGlobalFiliereStandings(state);
+      const tbody = document.getElementById("admin-standings-tbody");
+      tbody.innerHTML = standings.map((f, idx) => `
+        <tr>
+          <td style="font-weight:900; font-size:1.1rem;">#${idx + 1}</td>
+          <td>
+            <span class="filiere-pill" style="border-left-color: ${f.hex};">
+              <span class="filiere-dot" style="background-color: ${f.hex};"></span>
+              <span>${f.name}</span>
+            </span>
+          </td>
+          <td>${f.colorName}</td>
+          <td><b>${f.bySport.foot || 0}</b> pts</td>
+          <td><b>${f.bySport.basket || 0}</b> pts</td>
+          <td><b>${f.bySport.volley || 0}</b> pts</td>
+          <td><b>${f.bySport.relais || 0}</b> pts</td>
+          <td><b>${f.bySport.dodgeball || 0}</b> pts</td>
+          <td style="text-align:right; font-weight:900; font-size:1.25rem; color:${f.hex};">${f.totalPoints} pts</td>
+        </tr>
+      `).join("");
+    }
+
+    // 5. Rendu du Détail d'un Sport
+    function renderSportDetail() {
+      if (!currentSportId) return;
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      const theme = getSportTheme(sport.id);
+      const activeTeams = sport.teams.filter(t => t.active);
+
+      // Bannière d'en-tête
+      document.getElementById("sport-header-banner").innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+          <div>
+            <h2 style="font-size:1.75rem; color:${theme.color};">${sport.icon} ${sport.name}</h2>
+            <p style="color:var(--text-muted); font-size:0.9rem; margin-top:0.25rem;">📌 Terrains officiels : <b>${sport.pitchNames.join(" & ")}</b> • ${sport.excelNote}</p>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:0.95rem;">Équipes engagées : <b>${activeTeams.length}</b> / ${sport.teams.length}</div>
+            <div style="font-size:0.85rem; color:var(--text-muted);">Horaires : ${sport.startTime} à ${sport.endTime}</div>
+          </div>
+        </div>
+      `;
+
+      // Paramètres
+      document.getElementById("cfg-start-time").value = sport.startTime;
+      document.getElementById("cfg-match-duration").value = sport.matchDuration;
+      document.getElementById("cfg-pitches-count").value = sport.pitchesCount;
+      document.getElementById("cfg-pitch-names").value = (sport.pitchNames || []).join(", ");
+
+      // Cases à cocher des équipes
+      const cbContainer = document.getElementById("teams-Checkboxes-container");
+      cbContainer.innerHTML = sport.teams.map(team => {
+        const f = getFiliereById(team.filiereId);
+        return `
+          <label class="team-checkbox-item" style="border-left: 4px solid ${f.hex};">
+            <input type="checkbox" ${team.active ? "checked" : ""} onchange="toggleTeamActive('${team.id}', this.checked)" />
+            <span class="filiere-dot" style="background-color:${f.hex};"></span>
+            <span style="font-weight:700;">${team.name}</span>
+          </label>
+        `;
+      }).join("");
+
+      // Bannière d'action dédiée : Remplir les phases finales
+      const actionBannerContainer = document.getElementById("knockout-action-banner-container");
+      if (sport.initialized) {
+        actionBannerContainer.innerHTML = `
+          <div class="knockout-action-banner">
+            <div>
+              <h3 style="font-size:1.15rem; color:var(--text-main); margin-bottom:0.2rem;">
+                🎯 Remplissage automatique des Phases Finales
+              </h3>
+              <p style="font-size:0.85rem; color:var(--text-muted);">
+                Dès que les matchs de poule sont terminés, cliquez sur ce bouton pour qualifier automatiquement les meilleures équipes dans l'arbre final (Quarts/Demis).
+              </p>
+            </div>
+            <button class="btn btn-primary btn-lg" onclick="handleFillKnockoutClick()">
+              ⚡ Clôturer les Poules & Remplir les Phases Finales
+            </button>
+          </div>
+        `;
+      } else {
+        actionBannerContainer.innerHTML = "";
+      }
+
+      // Rendu du Compositeur de Poules
+      renderPoolComposer(sport);
+
+      // Rendu des Poules & Matchs de poule (CLASSEMENT AFFICHÉ EN PLUS GROS)
+      const poulesBlocksContainer = document.getElementById("poules-blocks-container");
+      const totalPoolMatches = sport.matches.filter(m => m.phase === "POULE").length;
+
+      if (!sport.pools || sport.pools.length === 0) {
+        poulesBlocksContainer.innerHTML = `
+          <div style="color:var(--text-muted); padding:1.5rem; text-align:center; background:var(--bg-input); border-radius:12px; border:1px solid var(--border-color);">
+            Aucune poule n'est encore configurée. Utilisez la section <b>"🎯 Composition Manuelle des Poules"</b> ci-dessus pour créer vos poules, puis cliquez sur <b>"Compléter & Mettre en forme"</b>.
+          </div>
+        `;
+      } else if (totalPoolMatches === 0) {
+        poulesBlocksContainer.innerHTML = `
+          <div style="color:var(--accent-warning); padding:1.5rem; text-align:center; background:rgba(245,158,11,0.08); border-radius:12px; border:1px solid rgba(245,158,11,0.3);">
+            👉 Vos poules sont configurées (<b>${sport.pools.map(p => p.name).join(", ")}</b>).<br/>
+            Cliquez sur le bouton vert <b>"⚡ Compléter & Mettre en forme (Matchs & Horaires)"</b> ci-dessus pour générer automatiquement les rencontres et planifier les horaires !
+          </div>
+        `;
+      } else if (sport.type === "race") {
+        // Relais 4x100m
+        poulesBlocksContainer.innerHTML = sport.pools.map(pool => {
+          const poolMatches = sport.matches.filter(m => m.phase === "POULE" && (m.poolId === pool.id || m.label.includes(pool.name)));
+          const rows = poolMatches.map(m => renderRaceRow(m, activeTeams)).join("");
+          return `
+            <div class="poule-block-card">
+              <div class="poule-header-bar">
+                <h3>🏃 ${pool.name}</h3>
+                <span style="font-size:0.85rem; color:var(--text-muted);">${(pool.teamIds || []).length} équipes</span>
+              </div>
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Heure</th>
+                    <th>Course</th>
+                    <th>Terrain</th>
+                    <th colspan="2">Couloirs & Résultats</th>
+                    <th>Arbitre</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          `;
+        }).join("");
+      } else {
+        // Sports 1v1 (Foot, Basket, Volley, Dodgeball)
+        const qPerPool = getSportQualifiersPerPool(sport);
+        poulesBlocksContainer.innerHTML = sport.pools.map(pool => {
+          const poolRankings = computePoolStandings(sport, pool.id);
+          const poolMatches = sport.matches.filter(m => m.phase === "POULE" && m.poolId === pool.id);
+
+          // Lignes du classement grand format avec mise en valeur dynamique des qualifiés
+          const rankingRows = poolRankings.map((st, i) => {
+            const f = getFiliereById(st.filiereId);
+            const isQualified = i < qPerPool; // Position qualificative dynamique
+            return `
+              <tr style="${isQualified ? 'background:rgba(16,185,129,0.08);' : ''}">
+                <td class="poule-rank-num" style="${isQualified ? 'color:var(--accent-success);' : ''}">
+                  ${i + 1}
+                </td>
+                <td>
+                  <span class="filiere-dot" style="background:${f.hex}; margin-right:8px; width:14px; height:14px;"></span>
+                  <span class="poule-team-name">${st.name}</span>
+                  ${isQualified ? '<span style="font-size:0.75rem; color:var(--accent-success); font-weight:800; margin-left:6px;">(Qualifié)</span>' : ''}
+                </td>
+                <td style="text-align:center; font-weight:800; font-size:1.05rem;">${st.played}</td>
+                <td class="poule-pts-large">${st.pts}</td>
+                <td style="text-align:center; font-weight:800; font-size:1.05rem;">${st.diff > 0 ? "+" + st.diff : st.diff}</td>
+                <td style="text-align:center; font-size:0.95rem; font-weight:700; color:var(--text-muted);">${st.goalsFor}:${st.goalsAgainst}</td>
+              </tr>
+            `;
+          }).join("");
+
+          const matchRows = poolMatches.map(m => renderMatchRow1v1(m, activeTeams)).join("");
+
+          return `
+            <div class="poule-block-card">
+              <div class="poule-header-bar">
+                <h3 style="color:var(--text-main); display:flex; align-items:center; gap:0.5rem;">
+                  <span>🔵</span> ${pool.name}
+                </h3>
+                <span style="font-size:0.9rem; color:var(--text-muted); font-weight:700;">
+                  ${(pool.teamIds || []).length} équipes • ${poolMatches.length} matchs de poule
+                </span>
+              </div>
+
+              <!-- Layout : Classement de la poule en plus gros à gauche + Matchs à droite -->
+              <div style="display:grid; grid-template-columns: minmax(380px, 44%) 1fr; gap:1.6rem; align-items:start;">
+                <!-- Tableau Classement de la Poule (EN PLUS GROS) -->
+                <div class="poule-standings-card-large">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                    <h4 style="font-size:1.25rem; font-weight:900; color:var(--text-main);">
+                      📊 Classement ${pool.name}
+                    </h4>
+                    <span style="font-size:0.8rem; color:var(--accent-success); font-weight:800; background:rgba(16,185,129,0.15); padding:0.2rem 0.5rem; border-radius:6px;">
+                      🟢 Top ${qPerPool} qualifié${qPerPool > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <table class="poule-standings-table-large">
+                    <thead>
+                      <tr>
+                        <th style="width:36px; text-align:center;">#</th>
+                        <th>Équipe</th>
+                        <th style="text-align:center;">J</th>
+                        <th style="text-align:center;">Pts</th>
+                        <th style="text-align:center;">Diff</th>
+                        <th style="text-align:center;">BP:BC</th>
+                      </tr>
+                    </thead>
+                    <tbody>${rankingRows}</tbody>
+                  </table>
+                </div>
+
+                <!-- Matchs de cette Poule -->
+                <div style="overflow-x:auto;">
+                  <table class="admin-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Heure</th>
+                        <th>Terrain</th>
+                        <th>Équipe A</th>
+                        <th style="text-align:center;">Score</th>
+                        <th>Équipe B</th>
+                        <th>Arbitre</th>
+                      </tr>
+                    </thead>
+                    <tbody>${matchRows}</tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join("");
+      }
+
+      // Rendu des Phases Finales (SÉPARÉ CLAIREMENT)
+      const knockoutContainer = document.getElementById("knockout-matches-container");
+      const knockoutMatches = sport.matches.filter(m => m.phase !== "POULE");
+
+      if (knockoutMatches.length === 0) {
+        knockoutContainer.innerHTML = `<p style="color:var(--text-muted); text-align:center; padding:1.5rem;">Aucune phase finale générée pour ce sport.</p>`;
+      } else {
+        const rows = knockoutMatches.map(m => {
+          if (m.isRace) return renderRaceRow(m, activeTeams);
+          return renderMatchRow1v1(m, activeTeams, true);
+        }).join("");
+
+        knockoutContainer.innerHTML = `
+          <div style="overflow-x:auto;">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Heure</th>
+                  <th>Phase / Match</th>
+                  <th>Terrain</th>
+                  <th>Équipe A</th>
+                  <th style="text-align:center;">Score</th>
+                  <th>Équipe B</th>
+                  <th>Arbitre</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      // Rendu des Stades & Points Gagnés par Équipe (SANS LA COLONNE STATUT)
+      const stagesTbody = document.getElementById("admin-stages-tbody");
+      stagesTbody.innerHTML = sport.teams.map(team => {
+        const f = getFiliereById(team.filiereId);
+        const stagePts = (sport.initialized && team.active && team.stageReached) ? (POINTS_SCALE[team.stageReached] || 0) : 0;
+        const bonusPts = Number(team.manualPointsBonus) || 0;
+        const total = team.active ? (stagePts + bonusPts) : 0;
+
+        return `
+          <tr style="${!team.active ? 'opacity:0.4;' : ''}">
+            <td><b>${team.name}</b></td>
+            <td>
+              <span class="filiere-pill" style="border-left-color:${f.hex};">
+                <span class="filiere-dot" style="background:${f.hex};"></span>
+                ${f.name}
+              </span>
+            </td>
+            <td>
+              <select ${!team.active || !sport.initialized ? "disabled" : ""} onchange="updateTeamStageManual('${team.id}', this.value)">
+                ${Object.keys(STAGE_LABELS).filter(stKey => {
+                  if (stKey === "POULE" || stKey === "FINALE" || stKey === "GAGNANT") return true;
+                  if (stKey === "HUITIEME") return (sport.matches || []).some(m => m.phase === "HUITIEME");
+                  if (stKey === "QUART") return (sport.matches || []).some(m => m.phase === "QUART");
+                  if (stKey === "DEMI") return (sport.matches || []).some(m => m.phase === "DEMI");
+                  return true;
+                }).map(stKey => `
+                  <option value="${stKey}" ${team.stageReached === stKey ? "selected" : ""}>${STAGE_LABELS[stKey]}</option>
+                `).join("")}
+              </select>
+            </td>
+            <td><b>${stagePts} pt(s)</b></td>
+            <td>
+              <input type="number" style="width:70px;" value="${bonusPts}" ${!team.active ? "disabled" : ""} onchange="updateTeamBonusManual('${team.id}', this.value)" />
+            </td>
+            <td style="font-weight:900; color:${f.hex}; font-size:1.15rem; text-align:right;">${total} pt(s)</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    // Helper : Ligne de match 1v1
+    function renderMatchRow1v1(m, activeTeams, isKnockout = false) {
+      const selectA = `
+        <select onchange="updateMatchTeam('${m.id}', 'teamAId', this.value)">
+          <option value="">${m.placeholderA || "-- À déterminer --"}</option>
+          ${activeTeams.map(t => `<option value="${t.id}" ${t.id === m.teamAId ? "selected" : ""}>${t.name}</option>`).join("")}
+        </select>
+      `;
+
+      const selectB = `
+        <select onchange="updateMatchTeam('${m.id}', 'teamBId', this.value)">
+          <option value="">${m.placeholderB || "-- À déterminer --"}</option>
+          ${activeTeams.map(t => `<option value="${t.id}" ${t.id === m.teamBId ? "selected" : ""}>${t.name}</option>`).join("")}
+        </select>
+      `;
+
+      return `
+        <tr>
+          <td style="font-weight:900;">${m.order}</td>
+          <td><input type="time" value="${m.time}" onchange="updateMatchField('${m.id}', 'time', this.value)" /></td>
+          ${isKnockout ? `<td><b>${m.label}</b></td>` : ""}
+          <td><input type="text" value="${m.pitch}" style="width:130px;" onchange="updateMatchField('${m.id}', 'pitch', this.value)" /></td>
+          <td>${selectA}</td>
+          <td style="text-align:center; white-space:nowrap;">
+            <input type="number" min="0" class="score-input" placeholder="-" value="${m.scoreA !== null ? m.scoreA : ""}" onchange="updateMatchScore('${m.id}', 'scoreA', this.value)" />
+            <span style="font-weight:900; margin:0 4px;">:</span>
+            <input type="number" min="0" class="score-input" placeholder="-" value="${m.scoreB !== null ? m.scoreB : ""}" onchange="updateMatchScore('${m.id}', 'scoreB', this.value)" />
+          </td>
+          <td>${selectB}</td>
+          <td><input type="text" placeholder="Arbitre..." value="${m.referee || ""}" style="width:125px;" onchange="updateMatchField('${m.id}', 'referee', this.value)" /></td>
+        </tr>
+      `;
+    }
+
+    // Helper : Ligne de course Relais
+    function renderRaceRow(m, activeTeams) {
+      const lanesEditors = (m.raceTeamIds || []).map((tid, laneIdx) => {
+        const resVal = (m.raceResults && tid && m.raceResults[tid]) ? m.raceResults[tid] : "";
+        return `
+          <div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.35rem;">
+            <span style="font-size:0.78rem; font-weight:800; width:65px;">C${laneIdx + 1}:</span>
+            <select onchange="updateRaceLaneTeam('${m.id}', ${laneIdx}, this.value)">
+              <option value="">-- Vide --</option>
+              ${activeTeams.map(t => `<option value="${t.id}" ${t.id === tid ? "selected" : ""}>${t.name}</option>`).join("")}
+            </select>
+            <input type="text" placeholder="Rang ou Temps" value="${resVal}" style="width:110px;"
+              onchange="updateRaceResult('${m.id}', '${tid || ""}', this.value)" />
+          </div>
+        `;
+      }).join("");
+
+      return `
+        <tr>
+          <td style="font-weight:900;">${m.order}</td>
+          <td><input type="time" value="${m.time}" onchange="updateMatchField('${m.id}', 'time', this.value)" /></td>
+          <td><b>${m.label}</b></td>
+          <td><input type="text" value="${m.pitch}" style="width:140px;" onchange="updateMatchField('${m.id}', 'pitch', this.value)" /></td>
+          <td colspan="2">${lanesEditors}</td>
+          <td><input type="text" placeholder="Chrono / Arbitre..." value="${m.referee || ""}" onchange="updateMatchField('${m.id}', 'referee', this.value)" /></td>
+        </tr>
+      `;
+    }
+
+    // 6. Action : Clic sur le Bouton de Remplissage des Phases Finales
+    function handleFillKnockoutClick() {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+
+      const poolMatches = sport.matches.filter(m => m.phase === "POULE");
+      const unplayed = poolMatches.filter(m => m.scoreA === null || m.scoreB === null || m.scoreA === "" || m.scoreB === "").length;
+
+      if (unplayed > 0) {
+        const ok = confirm(`⚠️ Attention : Il reste encore ${unplayed} match(s) de poule sans score saisi. Voulez-vous tout de même qualifier les équipes selon le classement actuel des poules ?`);
+        if (!ok) return;
+      }
+
+      fillKnockoutFromPools(currentSportId);
+      renderSportDetail();
+      alert("✅ Les matchs des phases finales ont été remplis automatiquement selon le classement des poules !");
+    }
+
+    // 7. Actions Utilisateur
+    function toggleTeamActive(teamId, isChecked) {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      const team = sport.teams.find(t => t.id === teamId);
+      if (team) {
+        team.active = isChecked;
+        saveState(state);
+        renderSportDetail();
+      }
+    }
+
+    function setAllTeamsActive(activeFlag) {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      sport.teams.forEach(t => { t.active = activeFlag; });
+      saveState(state);
+      renderSportDetail();
+    }
+
+    function saveSportTimingConfig() {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      const oldPitchNames = [...(sport.pitchNames || [])];
+
+      sport.startTime = document.getElementById("cfg-start-time").value || sport.startTime;
+      sport.matchDuration = Number(document.getElementById("cfg-match-duration").value) || sport.matchDuration;
+      sport.pitchesCount = Number(document.getElementById("cfg-pitches-count").value) || sport.pitchesCount;
+
+      const pitchNamesInput = document.getElementById("cfg-pitch-names");
+      if (pitchNamesInput && pitchNamesInput.value.trim()) {
+        const newPitchNames = pitchNamesInput.value.split(",").map(s => s.trim()).filter(Boolean);
+        if (newPitchNames.length > 0) {
+          sport.pitchNames = newPitchNames;
+          // Mettre à jour les terrains des matchs existants
+          if (Array.isArray(sport.matches)) {
+            sport.matches.forEach(m => {
+              const oldIdx = oldPitchNames.indexOf(m.pitch);
+              if (oldIdx !== -1 && newPitchNames[oldIdx]) {
+                m.pitch = newPitchNames[oldIdx];
+              } else if (newPitchNames.length === 1 || !newPitchNames.includes(m.pitch)) {
+                m.pitch = newPitchNames[0];
+              }
+            });
+          }
+        }
+      }
+
+      saveState(state);
+      renderSportDetail();
+    }
+
+    function handleInitializeSport() {
+      document.getElementById("init-modal").classList.remove("hidden");
+    }
+
+    function closeInitModal() {
+      document.getElementById("init-modal").classList.add("hidden");
+    }
+
+    function confirmInitMode(mode) {
+      closeInitModal();
+      const state = loadState();
+      if (mode === "complete") {
+        completeSportSchedule(state, currentSportId);
+        alert("✅ Planning et poules complétés avec succès (l'existant et vos poules ont été conservés).");
+      } else if (mode === "reset") {
+        initializeSportSchedule(state, currentSportId);
+        alert("🎲 Tirage aléatoire complet effectué à zéro.");
+      }
+      renderSportDetail();
+    }
+
+    // =========================================================================
+    // COMPOSITION MANUELLE DES POULES (FONCTIONS ADMIN)
+    // =========================================================================
+    let poolComposerCollapsed = false;
+
+    function togglePoolComposer() {
+      poolComposerCollapsed = !poolComposerCollapsed;
+      const content = document.getElementById("pool-composer-content");
+      const btn = document.getElementById("toggle-composer-btn");
+      if (poolComposerCollapsed) {
+        content.classList.add("hidden");
+        if (btn) btn.innerHTML = "Afficher ▾";
+      } else {
+        content.classList.remove("hidden");
+        if (btn) btn.innerHTML = "Masquer ▴";
+      }
+    }
+
+    function renderQualifiersOptions(sport) {
+      const qPerPool = getSportQualifiersPerPool(sport);
+      const poolsCount = (sport.pools || []).length;
+
+      if (poolsCount === 2) {
+        return `
+          <option value="2" ${qPerPool === 2 ? 'selected' : ''}>Top 2 / poule (➔ 4 qualifiés : Demi-finales directes) [Recommandé TIP]</option>
+          <option value="4" ${qPerPool === 4 ? 'selected' : ''}>Top 4 / poule (➔ 8 qualifiés : Quarts de finale)</option>
+          <option value="8" ${qPerPool === 8 ? 'selected' : ''}>Top 8 / poule (➔ 16 qualifiés : 8èmes de finale 🏆)</option>
+          <option value="1" ${qPerPool === 1 ? 'selected' : ''}>Top 1 / poule (➔ 2 qualifiés : Grande Finale directe)</option>
+        `;
+      } else if (poolsCount === 4) {
+        return `
+          <option value="2" ${qPerPool === 2 ? 'selected' : ''}>Top 2 / poule (➔ 8 qualifiés : Quarts de finale)</option>
+          <option value="4" ${qPerPool === 4 ? 'selected' : ''}>Top 4 / poule (➔ 16 qualifiés : 8èmes de finale 🏆)</option>
+          <option value="1" ${qPerPool === 1 ? 'selected' : ''}>Top 1 / poule (➔ 4 qualifiés : Demi-finales directes)</option>
+        `;
+      } else if (poolsCount === 1) {
+        return `
+          <option value="4" ${qPerPool === 4 ? 'selected' : ''}>Top 4 (➔ Demi-finales directes)</option>
+          <option value="8" ${qPerPool === 8 ? 'selected' : ''}>Top 8 (➔ Quarts de finale)</option>
+          <option value="16" ${qPerPool === 16 ? 'selected' : ''}>Top 16 (➔ 16 qualifiés : 8èmes de finale 🏆)</option>
+          <option value="2" ${qPerPool === 2 ? 'selected' : ''}>Top 2 (➔ Grande Finale directe)</option>
+        `;
+      } else if (poolsCount === 3) {
+        return `
+          <option value="1" ${qPerPool === 1 ? 'selected' : ''}>1er de chaque poule + Meilleur 2e (➔ 4 qualifiés : Demi-finales)</option>
+          <option value="2" ${qPerPool === 2 ? 'selected' : ''}>Top 2 de chaque poule + 2 Meilleurs (➔ 8 qualifiés : Quarts de finale)</option>
+          <option value="5" ${qPerPool === 5 ? 'selected' : ''}>Top 5 de chaque poule + 1 Meilleur (➔ 16 qualifiés : 8èmes de finale 🏆)</option>
+        `;
+      } else {
+        return `
+          <option value="2" ${qPerPool === 2 ? 'selected' : ''}>Top 2 par poule</option>
+          <option value="4" ${qPerPool === 4 ? 'selected' : ''}>Top 4 par poule</option>
+          <option value="8" ${qPerPool === 8 ? 'selected' : ''}>Top 8 par poule (➔ 8èmes de finale 🏆)</option>
+          <option value="1" ${qPerPool === 1 ? 'selected' : ''}>Top 1 par poule</option>
+        `;
+      }
+    }
+
+    function renderPoolComposer(sport) {
+      const container = document.getElementById("pool-composer-content");
+      if (!container) return;
+
+      if (!sport.pools || sport.pools.length === 0) {
+        setSportPoolsCount(sport, 2);
+        const state = loadState();
+        state.sports[sport.id] = sport;
+        saveState(state);
+      }
+
+      const activeTeams = sport.teams.filter(t => t.active);
+      const assigned = new Set();
+      sport.pools.forEach(p => (p.teamIds || []).forEach(id => assigned.add(id)));
+      const unassignedTeams = activeTeams.filter(t => !assigned.has(t.id));
+
+      const isRace = sport.type === "race";
+      const poolWord = isRace ? "Série" : "Poule";
+
+      container.innerHTML = `
+        <!-- Barre d'outils du compositeur -->
+        <div class="pool-composer-toolbar">
+          <div class="pool-composer-controls">
+            <span style="font-weight:800; font-size:0.9rem;">Nombre de ${poolWord.toLowerCase()}s :</span>
+            <div style="display:flex; gap:0.35rem;">
+              <button class="btn btn-sm ${sport.pools.length === 1 ? 'btn-primary' : ''}" onclick="handleSetPoolsCount(1)">1</button>
+              <button class="btn btn-sm ${sport.pools.length === 2 ? 'btn-primary' : ''}" onclick="handleSetPoolsCount(2)">2</button>
+              <button class="btn btn-sm ${sport.pools.length === 3 ? 'btn-primary' : ''}" onclick="handleSetPoolsCount(3)">3</button>
+              <button class="btn btn-sm ${sport.pools.length === 4 ? 'btn-primary' : ''}" onclick="handleSetPoolsCount(4)">4</button>
+              <button class="btn btn-sm" onclick="handleAddPool()">+ Ajouter</button>
+            </div>
+            ${!isRace ? `
+              <div style="display:flex; align-items:center; gap:0.4rem; margin-left:0.5rem;">
+                <span style="font-weight:800; font-size:0.9rem;">Qualifiés :</span>
+                <select class="btn btn-sm" style="font-size:0.85rem;" onchange="handleQualifiersChange(this.value)">
+                  ${renderQualifiersOptions(sport)}
+                </select>
+              </div>
+            ` : ''}
+          </div>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+            <button class="btn btn-sm" onclick="handleAutoDistributePools()" title="Répartit équitablement toutes les équipes actives dans les poules">
+              🪄 Répartir équitablement
+            </button>
+            <button class="btn btn-sm btn-danger" onclick="handleClearPools()" title="Retire toutes les équipes des poules">
+              🗑️ Vider
+            </button>
+            <button class="btn btn-success" style="font-weight:800; padding:0.55rem 1.15rem; font-size:0.95rem; box-shadow:0 3px 10px rgba(16,185,129,0.3);" onclick="handleCompleteAndSchedule()">
+              ⚡ Compléter & Mettre en forme (Matchs & Horaires)
+            </button>
+          </div>
+        </div>
+
+        <!-- Alerte Équipes non assignées -->
+        ${unassignedTeams.length > 0 ? `
+          <div class="unassigned-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+              <span style="font-weight:800; color:var(--accent-warning); font-size:0.95rem;">
+                ⚠️ ${unassignedTeams.length} équipe(s) active(s) non encore assignée(s) :
+              </span>
+              <span style="font-size:0.82rem; color:var(--text-muted);">
+                Choisissez une poule pour chacune ou cliquez sur <b>"Répartir équitablement"</b>
+              </span>
+            </div>
+            <div class="unassigned-chips-container">
+              ${unassignedTeams.map(t => {
+                const f = getFiliereById(t.filiereId);
+                return `
+                  <div class="unassigned-chip-item">
+                    <span class="filiere-dot" style="background:${f.hex};"></span>
+                    <b>${t.name}</b>
+                    <select style="padding:0.2rem 0.4rem; font-size:0.8rem; background:var(--bg-input); color:var(--text-main); border:1px solid var(--border-color); border-radius:6px;" onchange="if(this.value){ handleAssignTeam('${t.id}', this.value); }">
+                      <option value="">👉 Assigner à...</option>
+                      ${sport.pools.map(p => `<option value="${p.id}">${p.name}</option>`).join("")}
+                    </select>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Grille des Poules -->
+        <div class="pool-composer-grid">
+          ${sport.pools.map(pool => {
+            const poolTeams = (pool.teamIds || []).map(tid => sport.teams.find(t => t.id === tid)).filter(Boolean);
+            return `
+              <div class="pool-card-builder">
+                <div class="pool-card-builder-header">
+                  <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <h4 style="font-size:1.15rem; font-weight:900; margin:0;">${pool.name}</h4>
+                    <span style="font-size:0.8rem; background:rgba(255,255,255,0.08); padding:0.15rem 0.55rem; border-radius:6px; font-weight:700;">
+                      ${poolTeams.length} équipe(s)
+                    </span>
+                  </div>
+                  ${sport.pools.length > 1 ? `
+                    <button class="btn btn-sm btn-danger" style="padding:0.2rem 0.5rem; font-size:0.75rem;" onclick="handleRemovePool('${pool.id}')" title="Supprimer cette ${poolWord.toLowerCase()}">✕</button>
+                  ` : ''}
+                </div>
+
+                <div class="pool-team-list">
+                  ${poolTeams.length === 0 ? `
+                    <p style="color:var(--text-muted); font-size:0.85rem; text-align:center; padding:1.25rem 0;">Aucune équipe assignée</p>
+                  ` : poolTeams.map(team => {
+                    const f = getFiliereById(team.filiereId);
+                    return `
+                      <div class="pool-team-item">
+                        <div style="display:flex; align-items:center; gap:0.5rem; min-width:0;">
+                          <span class="filiere-dot" style="background:${f.hex}; flex-shrink:0;"></span>
+                          <span style="font-weight:700; font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${team.name}</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:0.35rem; flex-shrink:0;">
+                          <select style="padding:0.2rem 0.4rem; font-size:0.8rem; background:var(--bg-card); color:var(--text-main); border:1px solid var(--border-color); border-radius:6px;" onchange="handleAssignTeam('${team.id}', this.value)">
+                            <option value="${pool.id}" selected>${pool.name}</option>
+                            ${sport.pools.filter(p => p.id !== pool.id).map(p => `<option value="${p.id}">➔ ${p.name}</option>`).join("")}
+                            <option value="none">✕ Retirer</option>
+                          </select>
+                          <button class="btn btn-sm" style="padding:0.2rem 0.45rem; font-size:0.75rem;" onclick="handleRemoveTeam('${team.id}')" title="Retirer de la ${poolWord.toLowerCase()}">✕</button>
+                        </div>
+                      </div>
+                    `;
+                  }).join("")}
+                </div>
+
+                <div>
+                  <select style="width:100%; padding:0.45rem 0.65rem; font-size:0.85rem; background:var(--bg-input); color:var(--text-main); border:1px dashed var(--border-color); border-radius:8px;" onchange="if(this.value){ handleAssignTeam(this.value, '${pool.id}'); this.value=''; }">
+                    <option value="">+ Ajouter une équipe dans ${pool.name}...</option>
+                    ${activeTeams.filter(t => !pool.teamIds.includes(t.id)).map(t => {
+                      const curP = sport.pools.find(p => (p.teamIds || []).includes(t.id));
+                      const loc = curP ? `(dans ${curP.name})` : `(Non assignée)`;
+                      return `<option value="${t.id}">${t.name} ${loc}</option>`;
+                    }).join("")}
+                  </select>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function handleSetPoolsCount(count) {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      setSportPoolsCount(sport, count);
+      saveState(state);
+      renderSportDetail();
+    }
+
+    function handleAddPool() {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      addSportPool(sport);
+      saveState(state);
+      renderSportDetail();
+    }
+
+    function handleRemovePool(poolId) {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      removeSportPool(sport, poolId);
+      saveState(state);
+      renderSportDetail();
+    }
+
+    function handleAssignTeam(teamId, poolId) {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      assignTeamToSportPool(sport, teamId, poolId);
+      saveState(state);
+      renderSportDetail();
+    }
+
+    function handleRemoveTeam(teamId) {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      removeTeamFromSportPool(sport, teamId);
+      saveState(state);
+      renderSportDetail();
+    }
+
+    function handleAutoDistributePools() {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      autoDistributeTeamsToPools(sport);
+      saveState(state);
+      renderSportDetail();
+    }
+
+    function handleClearPools() {
+      if (confirm("Voulez-vous vraiment vider toutes les poules de ce sport ?")) {
+        const state = loadState();
+        const sport = state.sports[currentSportId];
+        clearAllSportPools(sport);
+        saveState(state);
+        renderSportDetail();
+      }
+    }
+
+    function handleQualifiersChange(val) {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      updateSportQualifiersPerPool(sport, val);
+      saveState(state);
+      renderSportDetail();
+    }
+
+    function handleCompleteAndSchedule() {
+      const state = loadState();
+      const ok = completeSportSchedule(state, currentSportId);
+      if (ok) {
+        alert("✅ Matchs générés, horaires planifiés et phases finales adaptées au nombre de qualifiés avec succès !");
+      }
+      renderSportDetail();
+    }
+
+    function updateMatchField(matchId, fieldName, value) {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      const match = sport.matches.find(m => m.id === matchId);
+      if (match) {
+        match[fieldName] = value;
+        saveState(state);
+      }
+    }
+
+    function updateMatchTeam(matchId, sideField, teamId) {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      const match = sport.matches.find(m => m.id === matchId);
+      if (match) {
+        match[sideField] = teamId || null;
+        recalculateSportStages(sport);
+        saveState(state);
+        renderSportDetail();
+      }
+    }
+
+    function updateMatchScore(matchId, scoreField, value) {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      const match = sport.matches.find(m => m.id === matchId);
+      if (match) {
+        match[scoreField] = value === "" ? null : Number(value);
+        if (match.phase !== "POULE") {
+          advanceKnockoutRounds(sport);
+        }
+        recalculateSportStages(sport);
+        saveState(state);
+        renderSportDetail();
+      }
+    }
+
+    function updateRaceLaneTeam(matchId, laneIdx, teamId) {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      const match = sport.matches.find(m => m.id === matchId);
+      if (match && match.raceTeamIds) {
+        match.raceTeamIds[laneIdx] = teamId || null;
+        recalculateSportStages(sport);
+        saveState(state);
+        renderSportDetail();
+      }
+    }
+
+    function updateRaceResult(matchId, teamId, resultValue) {
+      if (!teamId) {
+        alert("Veuillez d'abord assigner une équipe à ce couloir.");
+        return;
+      }
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      const match = sport.matches.find(m => m.id === matchId);
+      if (match) {
+        if (!match.raceResults) match.raceResults = {};
+        if (resultValue.trim() === "") {
+          delete match.raceResults[teamId];
+        } else {
+          match.raceResults[teamId] = resultValue.trim();
+        }
+        recalculateSportStages(sport);
+        saveState(state);
+        renderSportDetail();
+      }
+    }
+
+    function updateTeamStageManual(teamId, newStage) {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      const team = sport.teams.find(t => t.id === teamId);
+      if (team) {
+        team.stageReached = newStage;
+        saveState(state);
+        renderSportDetail();
+      }
+    }
+
+    function updateTeamBonusManual(teamId, bonusVal) {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      const team = sport.teams.find(t => t.id === teamId);
+      if (team) {
+        team.manualPointsBonus = Number(bonusVal) || 0;
+        saveState(state);
+        renderSportDetail();
+      }
+    }
+
+    function handleExportExcel() {
+      const state = loadState();
+      const sport = state.sports[currentSportId];
+      exportSportScheduleToExcel(sport);
+    }
+
+    function confirmGlobalReset() {
+      if (confirm("⚠️ Attention : Voulez-vous vraiment réinitialiser TOUS les sports, les plannings et les scores à zéro ?")) {
+        resetAllTournament();
+        if (currentSportId) renderSportDetail();
+        else renderDashboard();
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      checkAuth();
+      initTheme();
+      startRealtimeClock("admin-clock");
+      renderDashboard();
+
+      window.addEventListener("storage", (e) => {
+        if (e.key === STORAGE_KEY) {
+          if (currentSportId) renderSportDetail();
+          else renderDashboard();
+        }
+        if (e.key === THEME_KEY) {
+          initTheme();
+        }
+      });
+    });
+  </script>
+</body>
+</html>
