@@ -62,24 +62,17 @@
       <div style="font-size: 2.5rem; text-align: center; margin-bottom: 0.5rem;">🔑</div>
       <h2 style="text-align: center; margin-bottom: 0.35rem;">Changer le mot de passe</h2>
       <p style="text-align: center; color: var(--text-muted); font-size: 0.88rem; margin-bottom: 1.25rem;">
-        Le mot de passe sera sécurisé et haché en SHA-256 (jamais stocké en clair).
+        Le mot de passe administrateur se définit au <b>lancement du serveur</b>, côté serveur uniquement
+        (aucun mot de passe ni empreinte n'est jamais stocké dans le navigateur) :<br/>
+        <code style="font-size:0.85rem;">ADMIN_PASSWORD=nouveau_mot_de_passe ./start.sh</code>
       </p>
 
       <form onsubmit="handlePasswordChangeSubmit(event)" style="display:flex; flex-direction:column; gap:0.85rem;">
-        <div>
-          <label style="display:block; font-size:0.85rem; color:var(--text-muted); margin-bottom:0.25rem;">Nouveau mot de passe :</label>
-          <input type="password" id="new-pwd-input" required minlength="3" placeholder="Nouveau mot de passe..." style="width:100%;" />
-        </div>
-        <div>
-          <label style="display:block; font-size:0.85rem; color:var(--text-muted); margin-bottom:0.25rem;">Confirmez le nouveau mot de passe :</label>
-          <input type="password" id="confirm-pwd-input" required minlength="3" placeholder="Confirmez le mot de passe..." style="width:100%;" />
-        </div>
         <div id="pwd-change-error" style="color:var(--accent-danger); font-size:0.85rem; display:none;"></div>
         <div id="pwd-change-success" style="color:var(--accent-success); font-size:0.85rem; display:none;"></div>
 
         <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
-          <button type="submit" class="btn btn-primary" style="flex:1; justify-content:center;">Enregistrer</button>
-          <button type="button" class="btn" onclick="closePasswordChangeModal()">Annuler</button>
+          <button type="button" class="btn" style="flex:1; justify-content:center;" onclick="closePasswordChangeModal()">Fermer</button>
         </div>
       </form>
     </div>
@@ -103,7 +96,7 @@
         <span class="btn-icon">☀️</span>
         <span class="btn-text">Thème</span>
       </button>
-      <button class="header-btn" onclick="openPasswordChangeModal()" title="Modifier le mot de passe administrateur">
+      <button class="header-btn" onclick="openPasswordChangeModal()" title="Le mot de passe se change au lancement du serveur (ADMIN_PASSWORD=... ./start.sh)">
         <span class="btn-icon">🔑</span>
         <span class="btn-text">Mot de passe</span>
       </button>
@@ -225,19 +218,19 @@
             Barème : 8ème (1 pt) • Quart (2 pts) • Demi (4 pts) • Finale (5 pts) • Vainqueur (7 pts) • Poules : 3G / 2N / 1P
           </span>
         </div>
-        <div style="overflow-x:auto;">
-          <table class="admin-table">
+        <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
+          <table class="admin-table admin-standings-table" style="min-width:640px;">
             <thead>
               <tr>
                 <th style="width:50px;">Rang</th>
                 <th>Filière</th>
                 <th>Couleur</th>
-                <th>⚽ Foot</th>
-                <th>🏀 Basket</th>
-                <th>🏐 Volley</th>
-                <th>🏃 Relais</th>
-                <th>🤾 Dodgeball</th>
-                <th style="text-align:right;">Total Points</th>
+                <th style="white-space:nowrap;">Foot ⚽</th>
+                <th style="white-space:nowrap;">Basket 🏀</th>
+                <th style="white-space:nowrap;">Volley 🏐</th>
+                <th style="white-space:nowrap;">Relais 🏃</th>
+                <th style="white-space:nowrap;">Dodgeball 🤾</th>
+                <th style="text-align:right; white-space:nowrap;">Total Points</th>
               </tr>
             </thead>
             <tbody id="admin-standings-tbody"></tbody>
@@ -311,7 +304,7 @@
               Composez vos poules librement, puis cliquez sur <b>"⚡ Compléter & Mettre en forme"</b> pour générer automatiquement tous les matchs et les horaires.
             </span>
           </div>
-          <button class="btn btn-sm" id="toggle-composer-btn" onclick="togglePoolComposer()">Masquer ▾</button>
+          <button class="btn btn-sm" id="toggle-composer-btn" onclick="togglePoolComposer()">Afficher ▾</button>
         </div>
         <div id="pool-composer-content">
           <!-- Injecté dynamiquement par renderPoolComposer() -->
@@ -381,18 +374,22 @@
   <script>
     let currentSportId = null;
 
-    // 1. Authentification sécurisée (SHA-256)
+    // 1. Authentification : le mot de passe est vérifié PAR LE SERVEUR (POST /api/login),
+    // qui renvoie le jeton de session utilisé ensuite pour toutes les écritures API.
     function handleAdminLogin(e) {
       e.preventDefault();
       const val = document.getElementById("admin-pwd-input").value;
-      if (verifyAdminPassword(val)) {
-        sessionStorage.setItem("ADMIN_AUTH_TOKEN", sha256(val + "_TIP_AUTH_OK"));
-        document.getElementById("login-modal").classList.add("hidden");
-        document.getElementById("login-error").style.display = "none";
-        document.getElementById("admin-pwd-input").value = "";
-      } else {
-        document.getElementById("login-error").style.display = "block";
-      }
+      const errEl = document.getElementById("login-error");
+      errEl.style.display = "none";
+      loginAdmin(val).then(res => {
+        if (res.success) {
+          document.getElementById("login-modal").classList.add("hidden");
+          document.getElementById("admin-pwd-input").value = "";
+        } else {
+          errEl.textContent = res.message || "Mot de passe incorrect.";
+          errEl.style.display = "block";
+        }
+      });
     }
 
     function checkAuth() {
@@ -423,32 +420,11 @@
 
     function handlePasswordChangeSubmit(e) {
       e.preventDefault();
-      const p1 = document.getElementById("new-pwd-input").value;
-      const p2 = document.getElementById("confirm-pwd-input").value;
+      // Le mot de passe se change côté serveur (ADMIN_PASSWORD au lancement du serveur).
       const errEl = document.getElementById("pwd-change-error");
-      const succEl = document.getElementById("pwd-change-success");
-
-      if (p1 !== p2) {
-        errEl.textContent = "Les deux mots de passe ne correspondent pas.";
-        errEl.style.display = "block";
-        succEl.style.display = "none";
-        return;
-      }
-
-      const res = changeAdminPassword(p1);
-      if (res.success) {
-        sessionStorage.setItem("ADMIN_AUTH_TOKEN", sha256(p1 + "_TIP_AUTH_OK"));
-        succEl.innerHTML = "✅ Mot de passe modifié avec succès !<br/><span style='font-size:0.75rem; color:var(--text-muted);'>Empreinte SHA-256 enregistrée dans le navigateur.</span>";
-        succEl.style.display = "block";
-        errEl.style.display = "none";
-        setTimeout(() => {
-          closePasswordChangeModal();
-        }, 1500);
-      } else {
-        errEl.textContent = res.message;
-        errEl.style.display = "block";
-        succEl.style.display = "none";
-      }
+      const res = changeAdminPassword();
+      errEl.textContent = res.message;
+      errEl.style.display = "block";
     }
 
     // 2. Navigation
@@ -544,14 +520,14 @@
           : `<span style="background:rgba(245,158,11,0.18); color:var(--accent-warning); padding:0.25rem 0.65rem; border-radius:999px; font-size:0.8rem; font-weight:800;">Non initialisé</span>`;
 
         return `
-          <div class="sport-card" style="border-left: 6px solid ${theme.color};" onclick="openSportDetail('${sport.id}')">
+          <div class="sport-card" style="border-left: 6px solid ${theme.color};" onclick="openSportDetail('${escapeJsString(sport.id)}')">
             <div class="sport-card-header">
-              <span class="sport-card-title">${sport.icon} ${sport.name}</span>
+              <span class="sport-card-title">${escapeHtml(sport.icon)} ${escapeHtml(sport.name)}</span>
               ${statusBadge}
             </div>
             <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.75rem;">
-              🕒 Créneau : <b>${sport.startTime} - ${sport.endTime}</b><br/>
-              🏟️ Terrains : <b>${sport.pitchNames.join(", ")}</b><br/>
+              🕒 Créneau : <b>${escapeHtml(sport.startTime)} - ${escapeHtml(sport.endTime)}</b><br/>
+              🏟️ Terrains : <b>${escapeHtml((sport.pitchNames || []).join(", "))}</b><br/>
               👥 Équipes actives : <b>${activeCount}/${sport.teams.length}</b>
             </p>
             <div style="font-size:0.85rem; color:${theme.color}; font-weight:800;">Gérer les poules, matchs & scores ➔</div>
@@ -594,12 +570,12 @@
       document.getElementById("sport-header-banner").innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
           <div>
-            <h2 style="font-size:1.75rem; color:${theme.color};">${sport.icon} ${sport.name}</h2>
-            <p style="color:var(--text-muted); font-size:0.9rem; margin-top:0.25rem;">📌 Terrains officiels : <b>${sport.pitchNames.join(" & ")}</b> • ${sport.excelNote}</p>
+            <h2 style="font-size:1.75rem; color:${theme.color};">${escapeHtml(sport.icon)} ${escapeHtml(sport.name)}</h2>
+            <p style="color:var(--text-muted); font-size:0.9rem; margin-top:0.25rem;">📌 Terrains officiels : <b>${escapeHtml((sport.pitchNames || []).join(" & "))}</b> • ${escapeHtml(sport.excelNote)}</p>
           </div>
           <div style="text-align:right;">
             <div style="font-size:0.95rem;">Équipes engagées : <b>${activeTeams.length}</b> / ${sport.teams.length}</div>
-            <div style="font-size:0.85rem; color:var(--text-muted);">Horaires : ${sport.startTime} à ${sport.endTime}</div>
+            <div style="font-size:0.85rem; color:var(--text-muted);">Horaires : ${escapeHtml(sport.startTime)} à ${escapeHtml(sport.endTime)}</div>
           </div>
         </div>
       `;
@@ -616,9 +592,9 @@
         const f = getFiliereById(team.filiereId);
         return `
           <label class="team-checkbox-item" style="border-left: 4px solid ${f.hex};">
-            <input type="checkbox" ${team.active ? "checked" : ""} onchange="toggleTeamActive('${team.id}', this.checked)" />
+            <input type="checkbox" ${team.active ? "checked" : ""} onchange="toggleTeamActive('${escapeJsString(team.id)}', this.checked)" />
             <span class="filiere-dot" style="background-color:${f.hex};"></span>
-            <span style="font-weight:700;">${team.name}</span>
+            <span style="font-weight:700;">${escapeHtml(team.name)}</span>
           </label>
         `;
       }).join("");
@@ -652,11 +628,11 @@
       const shiftContainer = document.getElementById("sport-shift-toolbar-container");
       if (shiftContainer) {
         if (sport.initialized && sport.matches && sport.matches.length > 0) {
-          const pitchesOptions = (sport.pitchNames || []).map(p => `<option value="${p}">${p}</option>`).join("");
+          const pitchesOptions = (sport.pitchNames || []).map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
           shiftContainer.innerHTML = `
             <div class="shift-schedule-bar">
               <div class="shift-title">
-                <span>⏱️ Décalage horaire global (${sport.name}) :</span>
+                <span>⏱️ Décalage horaire global (${escapeHtml(sport.name)}) :</span>
                 <span style="font-size:0.8rem; font-weight:normal; color:var(--text-muted);">(décale automatiquement les matchs restants)</span>
               </div>
               <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
@@ -666,15 +642,15 @@
                   ${pitchesOptions}
                 </select>
                 <div class="shift-buttons-group">
-                  <button class="shift-btn btn-minus" onclick="handleShiftSchedule('${sport.id}', -10)" title="Avancer de 10 min">-10 min</button>
-                  <button class="shift-btn btn-minus" onclick="handleShiftSchedule('${sport.id}', -5)" title="Avancer de 5 min">-5 min</button>
-                  <button class="shift-btn btn-plus" onclick="handleShiftSchedule('${sport.id}', 5)" title="Décaler de 5 min">+5 min</button>
-                  <button class="shift-btn btn-plus" onclick="handleShiftSchedule('${sport.id}', 10)" title="Décaler de 10 min">+10 min</button>
-                  <button class="shift-btn btn-plus" onclick="handleShiftSchedule('${sport.id}', 15)" title="Décaler de 15 min">+15 min</button>
+                  <button class="shift-btn btn-minus" onclick="handleShiftSchedule('${escapeJsString(sport.id)}', -10)" title="Avancer de 10 min">-10 min</button>
+                  <button class="shift-btn btn-minus" onclick="handleShiftSchedule('${escapeJsString(sport.id)}', -5)" title="Avancer de 5 min">-5 min</button>
+                  <button class="shift-btn btn-plus" onclick="handleShiftSchedule('${escapeJsString(sport.id)}', 5)" title="Décaler de 5 min">+5 min</button>
+                  <button class="shift-btn btn-plus" onclick="handleShiftSchedule('${escapeJsString(sport.id)}', 10)" title="Décaler de 10 min">+10 min</button>
+                  <button class="shift-btn btn-plus" onclick="handleShiftSchedule('${escapeJsString(sport.id)}', 15)" title="Décaler de 15 min">+15 min</button>
                 </div>
                 <div style="display:flex; align-items:center; gap:0.3rem;">
                   <input type="number" id="shift-custom-mins" placeholder="min" style="width:65px; padding:0.35rem; font-size:0.85rem; border-radius:6px;" />
-                  <button class="shift-btn" onclick="handleShiftCustom('${sport.id}')">Appliquer</button>
+                  <button class="shift-btn" onclick="handleShiftCustom('${escapeJsString(sport.id)}')">Appliquer</button>
                 </div>
               </div>
             </div>
@@ -697,7 +673,7 @@
       } else if (totalPoolMatches === 0) {
         poulesBlocksContainer.innerHTML = `
           <div style="color:var(--accent-warning); padding:1.5rem; text-align:center; background:rgba(245,158,11,0.08); border-radius:12px; border:1px solid rgba(245,158,11,0.3);">
-            👉 Vos poules sont configurées (<b>${sport.pools.map(p => p.name).join(", ")}</b>).<br/>
+            👉 Vos poules sont configurées (<b>${escapeHtml(sport.pools.map(p => p.name).join(", "))}</b>).<br/>
             Cliquez sur le bouton vert <b>"⚡ Compléter & Mettre en forme (Matchs & Horaires)"</b> ci-dessus pour générer automatiquement les rencontres et planifier les horaires !
           </div>
         `;
@@ -709,7 +685,7 @@
           return `
             <div class="poule-block-card">
               <div class="poule-header-bar">
-                <h3>🏃 ${pool.name}</h3>
+                <h3>🏃 ${escapeHtml(pool.name)}</h3>
                 <span style="font-size:0.85rem; color:var(--text-muted);">${(pool.teamIds || []).length} équipes</span>
               </div>
               <table class="admin-table">
@@ -746,7 +722,7 @@
                 </td>
                 <td>
                   <span class="filiere-dot" style="background:${f.hex}; margin-right:8px; width:14px; height:14px;"></span>
-                  <span class="poule-team-name">${st.name}</span>
+                  <span class="poule-team-name">${escapeHtml(st.name)}</span>
                   ${isQualified ? '<span style="font-size:0.75rem; color:var(--accent-success); font-weight:800; margin-left:6px;">(Qualifié)</span>' : ''}
                 </td>
                 <td style="text-align:center; font-weight:800; font-size:1.05rem;">${st.played}</td>
@@ -763,7 +739,7 @@
             <div class="poule-block-card">
               <div class="poule-header-bar">
                 <h3 style="color:var(--text-main); display:flex; align-items:center; gap:0.5rem;">
-                  <span>🔵</span> ${pool.name}
+                  <span>🔵</span> ${escapeHtml(pool.name)}
                 </h3>
                 <span style="font-size:0.9rem; color:var(--text-muted); font-weight:700;">
                   ${(pool.teamIds || []).length} équipes • ${poolMatches.length} matchs de poule
@@ -776,7 +752,7 @@
                 <div class="poule-standings-card-large">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
                     <h4 style="font-size:1.25rem; font-weight:900; color:var(--text-main);">
-                      📊 Classement ${pool.name}
+                      📊 Classement ${escapeHtml(pool.name)}
                     </h4>
                     <span style="font-size:0.8rem; color:var(--accent-success); font-weight:800; background:rgba(16,185,129,0.15); padding:0.2rem 0.5rem; border-radius:6px;">
                       🟢 Top ${qPerPool} qualifié${qPerPool > 1 ? 's' : ''}
@@ -863,7 +839,7 @@
 
         return `
           <tr style="${!team.active ? 'opacity:0.4;' : ''}">
-            <td><b>${team.name}</b></td>
+            <td><b>${escapeHtml(team.name)}</b></td>
             <td>
               <span class="filiere-pill" style="border-left-color:${f.hex};">
                 <span class="filiere-dot" style="background:${f.hex};"></span>
@@ -871,7 +847,7 @@
               </span>
             </td>
             <td>
-              <select ${!team.active || !sport.initialized ? "disabled" : ""} onchange="updateTeamStageManual('${team.id}', this.value)">
+              <select ${!team.active || !sport.initialized ? "disabled" : ""} onchange="updateTeamStageManual('${escapeJsString(team.id)}', this.value)">
                 ${Object.keys(STAGE_LABELS).filter(stKey => {
                   if (stKey === "POULE" || stKey === "FINALE" || stKey === "GAGNANT") return true;
                   if (stKey === "HUITIEME") return (sport.matches || []).some(m => m.phase === "HUITIEME");
@@ -885,7 +861,7 @@
             </td>
             <td><b>${stagePts} pt(s)</b></td>
             <td>
-              <input type="number" style="width:70px;" value="${bonusPts}" ${!team.active ? "disabled" : ""} onchange="updateTeamBonusManual('${team.id}', this.value)" />
+              <input type="number" style="width:70px;" value="${bonusPts}" ${!team.active ? "disabled" : ""} onchange="updateTeamBonusManual('${escapeJsString(team.id)}', this.value)" />
             </td>
             <td style="font-weight:900; color:${f.hex}; font-size:1.15rem; text-align:right;">${total} pt(s)</td>
           </tr>
@@ -895,31 +871,34 @@
 
     // Helper : Ligne de match 1v1
     function renderMatchRow1v1(m, activeTeams, isKnockout = false) {
+      const mid = escapeJsString(m.id);
+      const numScoreA = Number.isFinite(Number(m.scoreA)) && m.scoreA !== null && m.scoreA !== "" ? Number(m.scoreA) : "";
+      const numScoreB = Number.isFinite(Number(m.scoreB)) && m.scoreB !== null && m.scoreB !== "" ? Number(m.scoreB) : "";
       const selectA = `
-        <select onchange="updateMatchTeam('${m.id}', 'teamAId', this.value)">
-          <option value="">${m.placeholderA || "-- À déterminer --"}</option>
-          ${activeTeams.map(t => `<option value="${t.id}" ${t.id === m.teamAId ? "selected" : ""}>${t.name}</option>`).join("")}
+        <select onchange="updateMatchTeam('${mid}', 'teamAId', this.value)">
+          <option value="">${escapeHtml(m.placeholderA || "-- À déterminer --")}</option>
+          ${activeTeams.map(t => `<option value="${escapeHtml(t.id)}" ${t.id === m.teamAId ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("")}
         </select>
       `;
 
       const selectB = `
-        <select onchange="updateMatchTeam('${m.id}', 'teamBId', this.value)">
-          <option value="">${m.placeholderB || "-- À déterminer --"}</option>
-          ${activeTeams.map(t => `<option value="${t.id}" ${t.id === m.teamBId ? "selected" : ""}>${t.name}</option>`).join("")}
+        <select onchange="updateMatchTeam('${mid}', 'teamBId', this.value)">
+          <option value="">${escapeHtml(m.placeholderB || "-- À déterminer --")}</option>
+          ${activeTeams.map(t => `<option value="${escapeHtml(t.id)}" ${t.id === m.teamBId ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("")}
         </select>
       `;
 
       return `
         <tr class="admin-match-row">
-          <td class="admin-match-cell-order" style="font-weight:900;">Match #${m.order} ${isKnockout ? `• <b>${m.label}</b>` : ""}</td>
+          <td class="admin-match-cell-order" style="font-weight:900;">Match #${m.order} ${isKnockout ? `• <b>${escapeHtml(m.label)}</b>` : ""}</td>
           <td class="admin-match-cell-meta">
             <div style="display:flex; gap:0.5rem; align-items:center;">
               <span style="font-size:0.8rem; color:var(--text-muted); font-weight:700;">🕒 Heure:</span>
-              <input type="time" value="${m.time}" onchange="updateMatchField('${m.id}', 'time', this.value)" />
+              <input type="time" value="${escapeHtml(m.time)}" onchange="updateMatchField('${mid}', 'time', this.value)" />
             </div>
             <div style="display:flex; gap:0.5rem; align-items:center;">
               <span style="font-size:0.8rem; color:var(--text-muted); font-weight:700;">📍 Terrain:</span>
-              <input type="text" value="${m.pitch}" style="width:130px;" onchange="updateMatchField('${m.id}', 'pitch', this.value)" />
+              <input type="text" value="${escapeHtml(m.pitch)}" style="width:130px;" onchange="updateMatchField('${mid}', 'pitch', this.value)" />
             </div>
           </td>
           <td class="admin-match-cell-teama">
@@ -927,9 +906,9 @@
             ${selectA}
           </td>
           <td class="admin-match-cell-score" style="text-align:center; white-space:nowrap;">
-            <input type="number" min="0" class="score-input" placeholder="-" value="${m.scoreA !== null ? m.scoreA : ""}" onchange="updateMatchScore('${m.id}', 'scoreA', this.value)" />
+            <input type="number" min="0" class="score-input" placeholder="-" value="${numScoreA}" onchange="updateMatchScore('${mid}', 'scoreA', this.value)" />
             <span style="font-weight:900; font-size:1.3rem; margin:0 6px;">:</span>
-            <input type="number" min="0" class="score-input" placeholder="-" value="${m.scoreB !== null ? m.scoreB : ""}" onchange="updateMatchScore('${m.id}', 'scoreB', this.value)" />
+            <input type="number" min="0" class="score-input" placeholder="-" value="${numScoreB}" onchange="updateMatchScore('${mid}', 'scoreB', this.value)" />
           </td>
           <td class="admin-match-cell-teamb">
             <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; margin-bottom:2px;">Équipe B :</div>
@@ -937,7 +916,7 @@
           </td>
           <td class="admin-match-cell-referee">
             <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; margin-bottom:2px;">🦺 Arbitre :</div>
-            <input type="text" placeholder="Nom de l'arbitre..." value="${m.referee || ""}" style="width:100%;" onchange="updateMatchField('${m.id}', 'referee', this.value)" />
+            <input type="text" placeholder="Nom de l'arbitre..." value="${escapeHtml(m.referee || "")}" style="width:100%;" onchange="updateMatchField('${mid}', 'referee', this.value)" />
           </td>
         </tr>
       `;
@@ -945,17 +924,19 @@
 
     // Helper : Ligne de course Relais
     function renderRaceRow(m, activeTeams) {
+      const mid = escapeJsString(m.id);
       const lanesEditors = (m.raceTeamIds || []).map((tid, laneIdx) => {
         const resVal = (m.raceResults && tid && m.raceResults[tid]) ? m.raceResults[tid] : "";
+        const safeTid = escapeJsString(tid || "");
         return `
           <div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.35rem;">
             <span style="font-size:0.78rem; font-weight:800; width:65px;">C${laneIdx + 1}:</span>
-            <select onchange="updateRaceLaneTeam('${m.id}', ${laneIdx}, this.value)">
+            <select onchange="updateRaceLaneTeam('${mid}', ${laneIdx}, this.value)">
               <option value="">-- Vide --</option>
-              ${activeTeams.map(t => `<option value="${t.id}" ${t.id === tid ? "selected" : ""}>${t.name}</option>`).join("")}
+              ${activeTeams.map(t => `<option value="${escapeHtml(t.id)}" ${t.id === tid ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("")}
             </select>
-            <input type="text" placeholder="Rang ou Temps" value="${resVal}" style="width:110px;"
-              onchange="updateRaceResult('${m.id}', '${tid || ""}', this.value)" />
+            <input type="text" placeholder="Rang ou Temps" value="${escapeHtml(resVal)}" style="width:110px;"
+              onchange="updateRaceResult('${mid}', '${safeTid}', this.value)" />
           </div>
         `;
       }).join("");
@@ -963,11 +944,11 @@
       return `
         <tr>
           <td style="font-weight:900;">${m.order}</td>
-          <td><input type="time" value="${m.time}" onchange="updateMatchField('${m.id}', 'time', this.value)" /></td>
-          <td><b>${m.label}</b></td>
-          <td><input type="text" value="${m.pitch}" style="width:140px;" onchange="updateMatchField('${m.id}', 'pitch', this.value)" /></td>
+          <td><input type="time" value="${escapeHtml(m.time)}" onchange="updateMatchField('${mid}', 'time', this.value)" /></td>
+          <td><b>${escapeHtml(m.label)}</b></td>
+          <td><input type="text" value="${escapeHtml(m.pitch)}" style="width:140px;" onchange="updateMatchField('${mid}', 'pitch', this.value)" /></td>
           <td colspan="2">${lanesEditors}</td>
-          <td><input type="text" placeholder="Chrono / Arbitre..." value="${m.referee || ""}" onchange="updateMatchField('${m.id}', 'referee', this.value)" /></td>
+          <td><input type="text" placeholder="Chrono / Arbitre..." value="${escapeHtml(m.referee || "")}" onchange="updateMatchField('${mid}', 'referee', this.value)" /></td>
         </tr>
       `;
     }
@@ -1066,19 +1047,22 @@
     // =========================================================================
     // COMPOSITION MANUELLE DES POULES (FONCTIONS ADMIN)
     // =========================================================================
-    let poolComposerCollapsed = false;
+    // Par défaut le compositeur est MASQUÉ (le bouton affiche "Afficher ▾")
+    let poolComposerCollapsed = true;
+
+    function syncPoolComposerButton() {
+      const content = document.getElementById("pool-composer-content");
+      const btn = document.getElementById("toggle-composer-btn");
+      if (content) {
+        if (poolComposerCollapsed) content.classList.add("hidden");
+        else content.classList.remove("hidden");
+      }
+      if (btn) btn.innerHTML = poolComposerCollapsed ? "Afficher ▾" : "Masquer ▴";
+    }
 
     function togglePoolComposer() {
       poolComposerCollapsed = !poolComposerCollapsed;
-      const content = document.getElementById("pool-composer-content");
-      const btn = document.getElementById("toggle-composer-btn");
-      if (poolComposerCollapsed) {
-        content.classList.add("hidden");
-        if (btn) btn.innerHTML = "Afficher ▾";
-      } else {
-        content.classList.remove("hidden");
-        if (btn) btn.innerHTML = "Masquer ▴";
-      }
+      syncPoolComposerButton();
     }
 
     function renderQualifiersOptions(sport) {
@@ -1124,6 +1108,8 @@
     function renderPoolComposer(sport) {
       const container = document.getElementById("pool-composer-content");
       if (!container) return;
+      // Synchronise l'état visuel (masqué/affiché + libellé du bouton) à chaque rendu
+      syncPoolComposerButton();
 
       if (!sport.pools || sport.pools.length === 0) {
         setSportPoolsCount(sport, 2);
@@ -1191,10 +1177,10 @@
                 return `
                   <div class="unassigned-chip-item">
                     <span class="filiere-dot" style="background:${f.hex};"></span>
-                    <b>${t.name}</b>
-                    <select style="padding:0.2rem 0.4rem; font-size:0.8rem; background:var(--bg-input); color:var(--text-main); border:1px solid var(--border-color); border-radius:6px;" onchange="if(this.value){ handleAssignTeam('${t.id}', this.value); }">
+                    <b>${escapeHtml(t.name)}</b>
+                    <select style="padding:0.2rem 0.4rem; font-size:0.8rem; background:var(--bg-input); color:var(--text-main); border:1px solid var(--border-color); border-radius:6px;" onchange="if(this.value){ handleAssignTeam('${escapeJsString(t.id)}', this.value); }">
                       <option value="">👉 Assigner à...</option>
-                      ${sport.pools.map(p => `<option value="${p.id}">${p.name}</option>`).join("")}
+                      ${sport.pools.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("")}
                     </select>
                   </div>
                 `;
@@ -1211,13 +1197,13 @@
               <div class="pool-card-builder">
                 <div class="pool-card-builder-header">
                   <div style="display:flex; align-items:center; gap:0.5rem;">
-                    <h4 style="font-size:1.15rem; font-weight:900; margin:0;">${pool.name}</h4>
+                    <h4 style="font-size:1.15rem; font-weight:900; margin:0;">${escapeHtml(pool.name)}</h4>
                     <span style="font-size:0.8rem; background:rgba(255,255,255,0.08); padding:0.15rem 0.55rem; border-radius:6px; font-weight:700;">
                       ${poolTeams.length} équipe(s)
                     </span>
                   </div>
                   ${sport.pools.length > 1 ? `
-                    <button class="btn btn-sm btn-danger" style="padding:0.2rem 0.5rem; font-size:0.75rem;" onclick="handleRemovePool('${pool.id}')" title="Supprimer cette ${poolWord.toLowerCase()}">✕</button>
+                    <button class="btn btn-sm btn-danger" style="padding:0.2rem 0.5rem; font-size:0.75rem;" onclick="handleRemovePool('${escapeJsString(pool.id)}')" title="Supprimer cette ${poolWord.toLowerCase()}">✕</button>
                   ` : ''}
                 </div>
 
@@ -1230,15 +1216,15 @@
                       <div class="pool-team-item">
                         <div style="display:flex; align-items:center; gap:0.5rem; min-width:0;">
                           <span class="filiere-dot" style="background:${f.hex}; flex-shrink:0;"></span>
-                          <span style="font-weight:700; font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${team.name}</span>
+                          <span style="font-weight:700; font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(team.name)}</span>
                         </div>
                         <div style="display:flex; align-items:center; gap:0.35rem; flex-shrink:0;">
-                          <select style="padding:0.2rem 0.4rem; font-size:0.8rem; background:var(--bg-card); color:var(--text-main); border:1px solid var(--border-color); border-radius:6px;" onchange="handleAssignTeam('${team.id}', this.value)">
-                            <option value="${pool.id}" selected>${pool.name}</option>
-                            ${sport.pools.filter(p => p.id !== pool.id).map(p => `<option value="${p.id}">➔ ${p.name}</option>`).join("")}
+                          <select style="padding:0.2rem 0.4rem; font-size:0.8rem; background:var(--bg-card); color:var(--text-main); border:1px solid var(--border-color); border-radius:6px;" onchange="handleAssignTeam('${escapeJsString(team.id)}', this.value)">
+                            <option value="${escapeHtml(pool.id)}" selected>${escapeHtml(pool.name)}</option>
+                            ${sport.pools.filter(p => p.id !== pool.id).map(p => `<option value="${escapeHtml(p.id)}">➔ ${escapeHtml(p.name)}</option>`).join("")}
                             <option value="none">✕ Retirer</option>
                           </select>
-                          <button class="btn btn-sm" style="padding:0.2rem 0.45rem; font-size:0.75rem;" onclick="handleRemoveTeam('${team.id}')" title="Retirer de la ${poolWord.toLowerCase()}">✕</button>
+                          <button class="btn btn-sm" style="padding:0.2rem 0.45rem; font-size:0.75rem;" onclick="handleRemoveTeam('${escapeJsString(team.id)}')" title="Retirer de la ${poolWord.toLowerCase()}">✕</button>
                         </div>
                       </div>
                     `;
@@ -1246,12 +1232,12 @@
                 </div>
 
                 <div>
-                  <select style="width:100%; padding:0.45rem 0.65rem; font-size:0.85rem; background:var(--bg-input); color:var(--text-main); border:1px dashed var(--border-color); border-radius:8px;" onchange="if(this.value){ handleAssignTeam(this.value, '${pool.id}'); this.value=''; }">
-                    <option value="">+ Ajouter une équipe dans ${pool.name}...</option>
+                  <select style="width:100%; padding:0.45rem 0.65rem; font-size:0.85rem; background:var(--bg-input); color:var(--text-main); border:1px dashed var(--border-color); border-radius:8px;" onchange="if(this.value){ handleAssignTeam(this.value, '${escapeJsString(pool.id)}'); this.value=''; }">
+                    <option value="">+ Ajouter une équipe dans ${escapeHtml(pool.name)}...</option>
                     ${activeTeams.filter(t => !pool.teamIds.includes(t.id)).map(t => {
                       const curP = sport.pools.find(p => (p.teamIds || []).includes(t.id));
-                      const loc = curP ? `(dans ${curP.name})` : `(Non assignée)`;
-                      return `<option value="${t.id}">${t.name} ${loc}</option>`;
+                      const loc = curP ? `(dans ${escapeHtml(curP.name)})` : `(Non assignée)`;
+                      return `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)} ${loc}</option>`;
                     }).join("")}
                   </select>
                 </div>
@@ -1412,6 +1398,8 @@
       const sport = state.sports[currentSportId];
       const team = sport.teams.find(t => t.id === teamId);
       if (team) {
+        // Le stade manuel est mémorisé comme plancher : recalculateSportStages ne pourra plus le baisser
+        team.manualStage = newStage;
         team.stageReached = newStage;
         saveState(state);
         renderSportDetail();
@@ -1557,7 +1545,7 @@
       const url = input.value.trim();
       fetch("/api/public-url", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: adminApiHeaders(),
         body: JSON.stringify({ publicUrl: url })
       })
       .then(res => res.json())
@@ -1614,18 +1602,28 @@
         }
       });
 
-      // Synchronisation initiale : si le serveur est actif, pousser le localStorage
-      // vers le serveur pour que les mobiles en 4G reçoivent l'état réel.
+      // Synchronisation initiale : ne pousser le localStorage vers le serveur que s'il est
+      // réellement plus récent que l'état serveur (évite d'écraser les scores avec un état vide/périmé).
       if (window.location.protocol.startsWith("http")) {
         const localState = loadState();
-        if (localState && localState.sports && localState.sports.length > 0) {
-          fetch("/api/state", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(localState)
-          }).then(() => {
-            console.log("✅ État local synchronisé avec le serveur TIP.");
-          }).catch(() => {});
+        if (localState && localState.sports && Object.keys(localState.sports).length > 0) {
+          fetch("/api/state")
+            .then(res => res.json())
+            .then(serverState => {
+              const serverTs = serverState && typeof serverState.lastUpdated === "string" ? serverState.lastUpdated : null;
+              const localTs = typeof localState.lastUpdated === "string" ? localState.lastUpdated : null;
+              const serverEmpty = !serverState || !serverState.sports || Object.keys(serverState.sports).length === 0 || serverState.error;
+              if (serverEmpty || (localTs && (!serverTs || localTs > serverTs))) {
+                fetch("/api/state", {
+                  method: "POST",
+                  headers: adminApiHeaders(),
+                  body: JSON.stringify(localState)
+                }).then(() => {
+                  console.log("✅ État local synchronisé avec le serveur TIP.");
+                }).catch(() => {});
+              }
+            })
+            .catch(() => {});
         }
       }
 

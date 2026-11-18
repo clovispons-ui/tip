@@ -119,6 +119,16 @@
   <script>
     let currentSportFilter = "ALL";
     let cachedMobileUrl = "";
+    let lastRenderedStamp = null;
+
+    // Rendu avec dédoublonnage : un seul rendu par version d'état (évite SSE + polling + storage
+    // de déclencher plusieurs re-rendus complets pour la même mise à jour)
+    function renderPublicViewOnce() {
+      const stamp = (loadState() && loadState().lastUpdated) || "";
+      if (stamp === lastRenderedStamp) return;
+      lastRenderedStamp = stamp;
+      renderPublicView();
+    }
 
     function setSportFilter(sportId) {
       currentSportFilter = sportId;
@@ -126,14 +136,15 @@
     }
 
     function renderFiliereBadge(teamName, filiereId) {
+      const safeName = escapeHtml(String(teamName ?? ""));
       if (!filiereId) {
-        return `<span style="color:var(--text-muted); font-style:italic;">${teamName}</span>`;
+        return `<span style="color:var(--text-muted); font-style:italic;">${safeName}</span>`;
       }
       const f = getFiliereById(filiereId);
       return `
         <span class="filiere-pill" style="border-left-color: ${f.hex};">
           <span class="filiere-dot" style="background-color: ${f.hex};"></span>
-          <span style="font-family: var(--font-athletic); font-size: 1.15rem; font-weight: 800;">${teamName}</span>
+          <span style="font-family: var(--font-athletic); font-size: 1.15rem; font-weight: 800;">${safeName}</span>
         </span>
       `;
     }
@@ -150,7 +161,9 @@
 
       container.classList.remove("hidden");
 
-      const level = flashInfo.level || "urgent";
+      // Liste blanche : level provient de l'API et ne doit jamais entrer brut dans une classe
+      const allowedLevels = ["urgent", "info", "call"];
+      const level = allowedLevels.includes(flashInfo.level) ? flashInfo.level : "urgent";
       let levelLabel = "🚨 ALERTE";
       if (level === "info") levelLabel = "ℹ️ INFORMATION";
       if (level === "call") levelLabel = "📢 APPEL";
@@ -172,6 +185,21 @@
           </div>
         </div>
       `;
+    }
+
+    // Mise à jour du chronomètre SANS re-rendu complet de la page (évite le scintillement du vidéoprojecteur)
+    function tickLiveScoreTimer(live) {
+      const timerEl = document.querySelector("#live-score-fullscreen-container .live-score-fullscreen-timer");
+      if (!timerEl || !live || !live.active) return;
+      let remaining;
+      if (live.timerRunning && live.timerEndsAt) {
+        remaining = Math.max(0, Math.round((live.timerEndsAt - Date.now()) / 1000));
+      } else {
+        remaining = live.timerRemainingOnPause !== undefined ? live.timerRemainingOnPause : ((live.timerMinutes || 10) * 60);
+      }
+      const m = Math.floor(remaining / 60);
+      const s = remaining % 60;
+      timerEl.textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
     }
 
     function renderLiveScoreFullscreen(live) {
@@ -196,8 +224,12 @@
       const s = remaining % 60;
       const timeFormatted = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 
-      const colA = live.teamAColor || "#ef4444";
-      const colB = live.teamBColor || "#2563eb";
+      // Couleur : uniquement une valeur hexadécimale valide (sinon style-attribute injection)
+      const safeColor = (c, fallback) => (/^#[0-9a-fA-F]{3,8}$/.test(String(c || "")) ? c : fallback);
+      const colA = safeColor(live.teamAColor, "#ef4444");
+      const colB = safeColor(live.teamBColor, "#2563eb");
+      const safeScoreA = Number.isFinite(Number(live.scoreA)) ? Number(live.scoreA) : 0;
+      const safeScoreB = Number.isFinite(Number(live.scoreB)) ? Number(live.scoreB) : 0;
 
       container.innerHTML = `
         <div class="live-score-fullscreen">
@@ -213,7 +245,7 @@
               <div class="live-score-team-side" style="border-top-color: ${colA};">
                 <div class="live-score-team-pill" style="background-color: ${colA};"></div>
                 <div class="live-score-team-name-fs">${escapeHtml(live.teamAName || "Équipe A")}</div>
-                <div class="live-score-digits-fs" style="color: ${colA};">${live.scoreA !== undefined ? live.scoreA : 0}</div>
+                <div class="live-score-digits-fs" style="color: ${colA};">${safeScoreA}</div>
               </div>
 
               <!-- VS SEPARATOR -->
@@ -225,7 +257,7 @@
               <div class="live-score-team-side" style="border-top-color: ${colB};">
                 <div class="live-score-team-pill" style="background-color: ${colB};"></div>
                 <div class="live-score-team-name-fs">${escapeHtml(live.teamBName || "Équipe B")}</div>
-                <div class="live-score-digits-fs" style="color: ${colB};">${live.scoreB !== undefined ? live.scoreB : 0}</div>
+                <div class="live-score-digits-fs" style="color: ${colB};">${safeScoreB}</div>
               </div>
             </div>
 
@@ -264,7 +296,9 @@
         }
       } catch (err) {
         console.warn("Erreur génération QR SVG:", err);
-        const fallback = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:0.8rem;color:var(--text-muted);text-align:center;padding:4px;"><a href="${escapeHtml(targetUrl)}" target="_blank" style="color:var(--primary);text-decoration:underline;word-break:break-all;">Accès Direct</a></div>`;
+        // N'accepter en href que des URL http(s) (jamais javascript:)
+        const safeHref = /^https?:\/\//i.test(targetUrl) ? escapeHtml(targetUrl) : "#";
+        const fallback = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:0.8rem;color:var(--text-muted);text-align:center;padding:4px;"><a href="${safeHref}" target="_blank" style="color:var(--primary);text-decoration:underline;word-break:break-all;">Accès Direct</a></div>`;
         if (previewBox) previewBox.innerHTML = fallback;
         if (bigBox) bigBox.innerHTML = fallback;
       }
@@ -328,7 +362,7 @@
             <td>
               <div class="filiere-pill" style="border-left-color: ${f.hex};">
                 <span class="filiere-dot" style="background-color: ${f.hex};"></span>
-                <span class="filiere-name-large">${f.name}</span>
+                <span class="filiere-name-large">${escapeHtml(String(f.name ?? ""))}</span>
               </div>
             </td>
             <td class="sport-pts-cell">${f.bySport.foot || 0}</td>
@@ -422,20 +456,20 @@
                 return `
                   <div class="projector-match-card" style="border-left: 6px solid ${theme.color}; border-color: ${theme.color};">
                     <div class="match-card-top">
-                      <div class="venue-badge-prominent">📍 ${m.pitch}</div>
+                      <div class="venue-badge-prominent">📍 ${escapeHtml(String(m.pitch ?? ""))}</div>
                       <div class="time-badge-sport" style="background-color: ${theme.color};">
-                        🕒 ${m.time}
+                        🕒 ${escapeHtml(String(m.time ?? ""))}
                       </div>
                     </div>
 
                     <div>
-                      <span class="match-detail-label">${m.sportIcon} ${m.sportName} • ${m.label}</span>
+                      <span class="match-detail-label">${escapeHtml(String(m.sportIcon ?? ""))} ${escapeHtml(String(m.sportName ?? ""))} • ${escapeHtml(String(m.label ?? ""))}</span>
                     </div>
 
                     <div style="padding: 0.25rem 0;">${lanesHtml}</div>
 
                     <div class="match-bottom-bar">
-                      <span style="font-weight:700;">🦺 Chrono/Arbitre : <b>${m.referee || "Organisateurs"}</b></span>
+                      <span style="font-weight:700;">🦺 Chrono/Arbitre : <b>${escapeHtml(String(m.referee || "Organisateurs"))}</b></span>
                       <span style="color:${theme.color}; font-weight:800;">⏳ À venir</span>
                     </div>
                   </div>
@@ -450,8 +484,9 @@
               const badgeB = renderFiliereBadge(teamB ? teamB.name : (m.placeholderB || "À déterminer"), teamB ? teamB.filiereId : null);
 
               const hasScores = m.scoreA !== null && m.scoreB !== null && m.scoreA !== "" && m.scoreB !== "";
-              const vsContent = hasScores
-                ? `<span style="font-family:var(--font-athletic); font-size:1.15rem; font-weight:900; color:var(--text-main);">${m.scoreA} - ${m.scoreB}</span>`
+              const numA = Number(m.scoreA), numB = Number(m.scoreB);
+              const vsContent = hasScores && Number.isFinite(numA) && Number.isFinite(numB)
+                ? `<span style="font-family:var(--font-athletic); font-size:1.15rem; font-weight:900; color:var(--text-main);">${numA} - ${numB}</span>`
                 : `<div class="vs-pill">VS</div>`;
 
               const statusText = hasScores
@@ -464,15 +499,15 @@
                 <div class="projector-match-card" style="border-left: 6px solid ${theme.color}; border-color: ${theme.color};">
                   <div class="match-card-top">
                     <div class="venue-badge-prominent">
-                      📍 ${m.pitch}
+                      📍 ${escapeHtml(String(m.pitch ?? ""))}
                     </div>
                     <div class="time-badge-sport" style="background-color: ${theme.color};">
-                      🕒 ${m.time}
+                      🕒 ${escapeHtml(String(m.time ?? ""))}
                     </div>
                   </div>
 
                   <div>
-                    <span class="match-detail-label">${m.sportIcon} ${m.sportName} • ${m.label}</span>
+                    <span class="match-detail-label">${escapeHtml(String(m.sportIcon ?? ""))} ${escapeHtml(String(m.sportName ?? ""))} • ${escapeHtml(String(m.label ?? ""))}</span>
                   </div>
 
                   <div class="match-confrontation">
@@ -482,7 +517,7 @@
                   </div>
 
                   <div class="match-bottom-bar">
-                    <span style="font-weight:700;">🦺 Arbitre : <b style="color:var(--text-main);">${m.referee || "À désigner"}</b></span>
+                    <span style="font-weight:700;">🦺 Arbitre : <b style="color:var(--text-main);">${escapeHtml(String(m.referee || "À désigner"))}</b></span>
                     ${statusText}
                   </div>
                 </div>
@@ -514,13 +549,16 @@
     document.addEventListener("DOMContentLoaded", () => {
       initTheme();
       startRealtimeClock("live-clock");
+      lastRenderedStamp = (loadState() && loadState().lastUpdated) || "";
       renderPublicView();
 
-      // Boucle temps réel pour rafraîchir le chronomètre si un match en direct est affiché
+      // Boucle temps réel : seul le texte du chronomètre est rafraîchi chaque seconde
+      // (renderPublicView complet uniquement sur changement d'état, via SSE/polling/storage)
       setInterval(() => {
         const state = loadState();
         if (state && state.liveScore && state.liveScore.active && state.liveScore.timerRunning) {
-          renderPublicView();
+          tickLiveScoreTimer(state.liveScore);
+          if ((state.lastUpdated || "") !== lastRenderedStamp) renderPublicViewOnce();
         }
       }, 1000);
 
@@ -540,7 +578,7 @@
           .then(serverState => {
             if (serverState && serverState.sports) {
               localStorage.setItem(STORAGE_KEY, JSON.stringify(serverState));
-              renderPublicView();
+              renderPublicViewOnce();
             }
           })
           .catch(() => {});
@@ -576,7 +614,7 @@
         pollTunnelUrl();
 
         // 3. Connexion SSE temps réel (mises à jour admin → vidéoprojecteur)
-        initServerSync(renderPublicView);
+        initServerSync(renderPublicViewOnce);
       } else {
         // Accès fichier direct (file://) : pas de serveur
         updateQrCodeWidgets();
@@ -586,7 +624,7 @@
       window.addEventListener("storage", (e) => {
         if (e.key === STORAGE_KEY) {
           const prevState = loadState();
-          renderPublicView();
+          renderPublicViewOnce();
           // Détection d'un nouveau flash info via storage local
           try {
             const nextState = JSON.parse(e.newValue || "{}");

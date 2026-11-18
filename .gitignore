@@ -1,0 +1,14 @@
+# Données d'événement (état live du tournoi) : ne jamais committer
+data/*
+!data/.gitkeep
+
+# Binaires téléchargés (cloudflared) et caches
+.bin/
+__pycache__/
+*.pyc
+
+# Fichiers locaux divers
+*.log
+.DS_Store
+opencode.jsonc
+.tip-server.pid

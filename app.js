@@ -5,12 +5,13 @@
    ========================================================================== */
 
 // ============================================================================
-// 🔒 SÉCURITÉ & AUTHENTIFICATION ADMIN (HASH CRYPTOGRAPHIQUE SHA-256)
-// Le mot de passe n'est JAMAIS stocké en clair dans le code.
-// Empreinte SHA-256 par défaut de votre mot de passe ("BDSBDEBAR") :
+// 🔒 SÉCURITÉ & AUTHENTIFICATION ADMIN
+// Le mot de passe est vérifié UNIQUEMENT par le serveur (POST /api/login),
+// qui renvoie le jeton de session X-Admin-Token exigé pour toute écriture API.
+// Aucun hash de mot de passe n'est jamais stocké ni calculé côté client.
+// Le mot de passe se définit au lancement : ADMIN_PASSWORD=... ./start.sh
 // ============================================================================
-const DEFAULT_ADMIN_PASSWORD_HASH = "7402c4886baceceb680a9aaf6260d94fd53da013eb59502c8c6e03e4a49b50e0";
-const ADMIN_HASH_STORAGE_KEY = "TIP_ADMIN_CUSTOM_HASH";
+const ADMIN_TOKEN_STORAGE_KEY = "ADMIN_AUTH_TOKEN";
 
 // Fonction autonome de hachage SHA-256 (standard universel, compatible tout navigateur)
 function sha256(ascii) {
@@ -70,36 +71,58 @@ function sha256(ascii) {
   return result;
 }
 
-function getAdminPasswordHash() {
-  try {
-    return localStorage.getItem(ADMIN_HASH_STORAGE_KEY) || DEFAULT_ADMIN_PASSWORD_HASH;
-  } catch (e) {
-    return DEFAULT_ADMIN_PASSWORD_HASH;
-  }
+// Connexion admin côté serveur : renvoie une Promise résolue avec le jeton de session.
+function loginAdmin(password) {
+  return fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password })
+  })
+    .then(res => res.json().then(data => ({ status: res.status, data })))
+    .then(({ status, data }) => {
+      if (status === 200 && data && data.ok && data.token) {
+        try { sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, data.token); } catch (e) {}
+        return { success: true, token: data.token };
+      }
+      return { success: false, message: (data && data.error) || "Mot de passe incorrect" };
+    })
+    .catch(() => ({ success: false, message: "Serveur injoignable — lancez ./start.sh" }));
 }
 
-function verifyAdminPassword(inputPassword) {
-  if (!inputPassword) return false;
-  const inputHash = sha256(inputPassword);
-  return inputHash === getAdminPasswordHash();
+function getAdminToken() {
+  try { return sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || ""; } catch (e) { return ""; }
 }
 
-function changeAdminPassword(newPassword) {
-  if (!newPassword || newPassword.length < 3) {
-    return { success: false, message: "Le mot de passe doit comporter au moins 3 caractères." };
-  }
-  const newHash = sha256(newPassword);
-  try {
-    localStorage.setItem(ADMIN_HASH_STORAGE_KEY, newHash);
-  } catch (e) {
-    console.error(e);
-  }
-  return { success: true, hash: newHash };
+// Le mot de passe se change au niveau du serveur (variable ADMIN_PASSWORD au lancement)
+function changeAdminPassword() {
+  return { success: false, message: "Le mot de passe se change désormais au lancement du serveur : relancez avec ADMIN_PASSWORD=nouveau ./start.sh" };
 }
 // ============================================================================
 
 const STORAGE_KEY = "TOURNOI_INTERFILIERES_STATE_V1";
 const THEME_KEY = "TOURNOI_THEME_MODE";
+
+// ============================================================================
+// 🛡️ ÉCHAPPEMENT HTML (protection XSS) — toute donnée issue de l'état (noms
+// d'équipes, arbitres, terrains, libellés, IDs) doit passer par ces fonctions
+// avant d'être injectée dans un innerHTML ou un attribut.
+// ============================================================================
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+// Pour un identifiant passé dans un gestionnaire inline (onclick="f('...')")
+function escapeJsString(value) {
+  return String(value ?? "").replace(/[\\'"\r\n<>&]/g, "");
+}
+// Couleur : uniquement #hex valide, sinon valeur de repli
+function safeColor(value, fallback) {
+  return /^#[0-9a-fA-F]{3,8}$/.test(String(value || "")) ? value : fallback;
+}
 
 // 1. Définition des 8 Filières et Couleurs officielles
 const FILIERES = [
@@ -539,14 +562,9 @@ function loadState() {
       });
     }
 
-    // 6. Nettoyage automatique des phases finales (enlève 8èmes et quarts si pas assez de qualifiés)
-    if (state.sports) {
-      Object.values(state.sports).forEach(sport => {
-        if (cleanupUnneededKnockoutMatches(sport)) {
-          needsSave = true;
-        }
-      });
-    }
+    // 6. Nettoyage automatique des phases finales retiré du chargement :
+    // il supprimait silencieusement des matchs déjà joués (avec scores) à chaque loadState.
+    // Le nettoyage n'a lieu que lors d'un changement explicite de nombre de qualifiés (admin).
 
     if (needsSave) {
       try {
@@ -589,6 +607,12 @@ function saveState(state) {
   }, 120);
 }
 
+// En-têtes des requêtes d'écriture API : le jeton admin (calculé à la connexion) est exigé par le serveur
+function adminApiHeaders() {
+  const token = getAdminToken();
+  return { "Content-Type": "application/json", "X-Admin-Token": token };
+}
+
 function executeServerSave() {
   if (isSavingToServer || !pendingStateToSave) return;
   const stateToSend = pendingStateToSave;
@@ -597,7 +621,7 @@ function executeServerSave() {
 
   fetch("/api/state", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: adminApiHeaders(),
     body: JSON.stringify(stateToSend)
   })
   .then(() => {})
@@ -634,6 +658,13 @@ function addMinutesToTime(timeStr, minsToAdd) {
   return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
 }
 
+// Conversion "HH:MM" -> minutes (comparaisons numériques, insensible au remplissage)
+function toMinutes(timeStr) {
+  if (!timeStr || !timeStr.includes(":")) return 0;
+  const [hh, mm] = timeStr.split(":").map(Number);
+  return (hh || 0) * 60 + (mm || 0);
+}
+
 function shuffleArray(arr) {
   const copy = [...arr];
   for (let i = copy.length - 1; i > 0; i--) {
@@ -655,10 +686,8 @@ function shiftSportSchedule(sportId, deltaMinutes, pitchFilter = "ALL") {
 
   let count = 0;
   sport.matches.forEach(m => {
-    // Ne décaler que les matchs non terminés (sans score renseigné)
-    const isFinished = (m.scoreA !== null && m.scoreB !== null && m.scoreA !== "" && m.scoreB !== "") ||
-                       (m.raceResults && Object.keys(m.raceResults).length > 0);
-    if (isFinished) return;
+    // Ne décaler que les matchs non commencés : un seul score saisi = match en cours, on ne le déplace pas
+    if (matchHasScore(m)) return;
 
     if (pitchFilter && pitchFilter !== "ALL" && m.pitch !== pitchFilter) return;
 
@@ -687,7 +716,7 @@ function setFlashInfo(active, message = "", level = "urgent") {
   if (typeof fetch === "function" && typeof window !== "undefined" && window.location.protocol.startsWith("http")) {
     fetch("/api/flash", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: adminApiHeaders(),
       body: JSON.stringify(state.flashInfo)
     }).catch(() => {});
   }
@@ -814,6 +843,8 @@ function triggerMobileAlert(title, body) {
 }
 
 let lastSeenFlashTimestamp = null;
+let lastSseEventAt = 0;
+let sseHealthy = false;
 
 // Synchronisation temps réel avec le serveur local (SSE) + fallback polling
 function initServerSync(onUpdateCallback) {
@@ -823,11 +854,26 @@ function initServerSync(onUpdateCallback) {
     function connectSSE() {
       try {
         es = new EventSource("/api/events");
+        es.onopen = function() {
+          sseHealthy = true;
+          lastSseEventAt = Date.now();
+        };
+        // Compte aussi les keepalives (commentaires SSE) comme preuve de vie du flux
+        if (typeof es.addEventListener === "function") {
+          // pas d'événement dédié pour les commentaires ; on se rabat sur onmessage + heartbeat implicite
+        }
         es.onmessage = function(e) {
+          sseHealthy = true;
+          lastSseEventAt = Date.now();
+          // Les commentaires SSE (": keepalive") n'arrivent pas dans onmessage ; on les compte via un listener brut
           try {
             const data = JSON.parse(e.data);
             if (data.type === "STATE_UPDATE" && data.state) {
               const prevState = loadState();
+              // Dernier arrivé, dernier servi : un état serveur plus ancien que le local ne écrase pas les scores récents
+              const serverTs = typeof data.state.lastUpdated === "string" ? data.state.lastUpdated : null;
+              const localTs = prevState && typeof prevState.lastUpdated === "string" ? prevState.lastUpdated : null;
+              if (serverTs && localTs && serverTs < localTs) return;
               localStorage.setItem(STORAGE_KEY, JSON.stringify(data.state));
               // Détection alerte flash via STATE_UPDATE
               if (data.state.flashInfo && data.state.flashInfo.active) {
@@ -865,6 +911,7 @@ function initServerSync(onUpdateCallback) {
         };
 
         es.onerror = function() {
+          sseHealthy = false;
           // Si SSE est coupé par un proxy mobile 4G ou veille de téléphone, reconnection automatique
           if (es) {
             es.close();
@@ -879,9 +926,11 @@ function initServerSync(onUpdateCallback) {
 
     connectSSE();
 
-    // Fallback polling périodique (toutes les 4 secondes) pour garantir les alertes sur smartphone
-    // même si un navigateur mobile ou Cloudflare met en pause la connexion EventSource
+    // Fallback polling : ne tourne que si SSE est KO ou silencieux depuis > 10 s
+    // (évite de télécharger l'état complet toutes les 4 s sur chaque téléphone en parallèle du SSE)
     setInterval(() => {
+      const sseOk = sseHealthy && (Date.now() - lastSseEventAt) < 10000;
+      if (sseOk) return;
       fetch("/api/state")
         .then(res => res.ok ? res.json() : null)
         .then(serverState => {
@@ -895,6 +944,11 @@ function initServerSync(onUpdateCallback) {
             serverState.flashInfo.active &&
             (!localState || !localState.flashInfo || localState.flashInfo.timestamp !== serverState.flashInfo.timestamp)
           );
+
+          const serverTs = typeof serverState.lastUpdated === "string" ? serverState.lastUpdated : null;
+          const localTs = localState && typeof localState.lastUpdated === "string" ? localState.lastUpdated : null;
+          // Ne jamais écraser un état local plus récent par un état serveur périmé
+          if (serverTs && localTs && serverTs < localTs && !hasFlashChange) return;
 
           const hasStateChange = Boolean(
             !localState ||
@@ -1029,30 +1083,33 @@ function updateSportQualifiersPerPool(sport, val) {
   cleanupUnneededKnockoutMatches(sport);
 }
 
-// Règle TIP : Enlève les 8èmes et quarts si pas assez de qualifiés
+// Un match est considéré comme joué si un score (ou un résultat de course) est saisi.
+// `!= null` (loose) pour aussi exclure undefined (JSON legacy sans la clé).
+function matchHasScore(m) {
+  if (!m) return false;
+  if (m.raceResults && Object.keys(m.raceResults).length > 0) return true;
+  return (m.scoreA != null && m.scoreA !== "") || (m.scoreB != null && m.scoreB !== "");
+}
+
+// Règle TIP : Enlève les 8èmes et quarts si pas assez de qualifiés.
+// ⚠️ Les matchs DÉJÀ JOUÉS (avec score) ne sont jamais supprimés : leurs scores sont conservés.
 function cleanupUnneededKnockoutMatches(sport) {
   if (!sport || sport.type === "race" || !sport.matches) return false;
   const numQualifiers = getSportQualifiersCount(sport);
   let changed = false;
 
+  const keepIfPlayed = (phaseList) => {
+    const prevLen = sport.matches.length;
+    sport.matches = sport.matches.filter(m => !phaseList.includes(m.phase) || matchHasScore(m));
+    if (sport.matches.length !== prevLen) changed = true;
+  };
+
   // 8èmes nécessitent au moins 16 qualifiés
-  if (numQualifiers < 16) {
-    const prevLen = sport.matches.length;
-    sport.matches = sport.matches.filter(m => m.phase !== "HUITIEME");
-    if (sport.matches.length !== prevLen) changed = true;
-  }
+  if (numQualifiers < 16) keepIfPlayed(["HUITIEME"]);
   // Quarts nécessitent au moins 8 qualifiés
-  if (numQualifiers < 8) {
-    const prevLen = sport.matches.length;
-    sport.matches = sport.matches.filter(m => m.phase !== "QUART");
-    if (sport.matches.length !== prevLen) changed = true;
-  }
+  if (numQualifiers < 8) keepIfPlayed(["QUART"]);
   // Demis nécessitent au moins 4 qualifiés
-  if (numQualifiers < 4) {
-    const prevLen = sport.matches.length;
-    sport.matches = sport.matches.filter(m => m.phase !== "DEMI" && m.phase !== "PETITE_FINALE");
-    if (sport.matches.length !== prevLen) changed = true;
-  }
+  if (numQualifiers < 4) keepIfPlayed(["DEMI", "PETITE_FINALE"]);
 
   // Mettre à jour les placeholders des demis si pas de quarts
   const quarters = sport.matches.filter(m => m.phase === "QUART");
@@ -1223,27 +1280,43 @@ function formatAndScheduleTeamSportMatches(sport, activeTeams) {
   const remaining = [...rawPoolMatches];
   let orderCounter = 1;
 
+  // Occupations déjà réservées par les matchs joués dont on conserve l'heure :
+  // sans ça, un match conservé à 09:42 n'empêche pas un nouveau match d'être placé à 09:42
+  // (double booking équipe + terrain vérifié avant le correctif).
+  const keptSlotTeams = new Map();  // time -> Set(teamId)
+  const keptSlotPitches = new Map(); // time -> Set(pitch)
+  for (const m of rawPoolMatches) {
+    if (matchHasScore(m) && m.time) {
+      if (!keptSlotTeams.has(m.time)) keptSlotTeams.set(m.time, new Set());
+      if (!keptSlotPitches.has(m.time)) keptSlotPitches.set(m.time, new Set());
+      keptSlotTeams.get(m.time).add(m.teamAId).add(m.teamBId);
+      if (m.pitch) keptSlotPitches.get(m.time).add(m.pitch);
+    }
+  }
+
   while (remaining.length > 0) {
     let availablePitches = sport.pitchesCount;
-    if (sport.id === "foot" && currentTime >= "11:00") {
+    if (sport.id === "foot" && toMinutes(currentTime) >= toMinutes("11:00")) {
       availablePitches = 1;
     }
 
-    const busyTeamsInSlot = new Set();
+    const busyTeamsInSlot = new Set(keptSlotTeams.get(currentTime) || []);
+    const busyPitchesInSlot = new Set(keptSlotPitches.get(currentTime) || []);
     for (let p = 0; p < availablePitches && remaining.length > 0; p++) {
+      const pitchName = sport.pitchNames[p] || `Terrain ${p + 1}`;
       let chosenIdx = remaining.findIndex(
-        m => !busyTeamsInSlot.has(m.teamAId) && !busyTeamsInSlot.has(m.teamBId)
+        m => !busyTeamsInSlot.has(m.teamAId) && !busyTeamsInSlot.has(m.teamBId) && !busyPitchesInSlot.has(pitchName)
       );
       if (chosenIdx === -1) break;
 
       const m = remaining.splice(chosenIdx, 1)[0];
       busyTeamsInSlot.add(m.teamAId);
       busyTeamsInSlot.add(m.teamBId);
+      busyPitchesInSlot.add(pitchName);
 
-      const pitchName = sport.pitchNames[p] || `Terrain ${p + 1}`;
       m.order = orderCounter++;
       // Ne réassigner heure et terrain que pour les matchs non joués ou sans heure
-      if (m.scoreA === null || m.scoreB === null || !m.time) {
+      if (!matchHasScore(m) || !m.time) {
         m.time = currentTime;
         m.pitch = pitchName;
       }
@@ -1385,9 +1458,9 @@ function formatAndScheduleTeamSportMatches(sport, activeTeams) {
       });
     }
 
-    if (sport.pitchesCount < 2) {
-      knockoutTime = addMinutesToTime(knockoutTime, sport.matchDuration);
-    }
+    // Toujours avancer l'horloge après la petite finale : PF et Grande Finale ne doivent
+    // jamais partager le même créneau (vérifié avant correctif : même heure + même terrain)
+    knockoutTime = addMinutesToTime(knockoutTime, sport.matchDuration);
   }
 
   // Grande Finale
@@ -1534,7 +1607,8 @@ function computePoolStandings(sport, poolId) {
   });
 
   sport.matches
-    .filter(m => m.phase === "POULE" && m.poolId === poolId && m.scoreA !== null && m.scoreB !== null && m.scoreA !== "" && m.scoreB !== "")
+    // `!= null` loose : exclut aussi undefined (matchs legacy sans clé de score), qui comptaient avant comme match nul (2 pts)
+    .filter(m => m.phase === "POULE" && m.poolId === poolId && m.scoreA != null && m.scoreB != null && m.scoreA !== "" && m.scoreB !== "")
     .forEach(m => {
       const sA = Number(m.scoreA);
       const sB = Number(m.scoreB);
@@ -1737,7 +1811,9 @@ function fillKnockoutFromPools(sportId) {
         if (b.diff !== a.diff) return b.diff - a.diff;
         return b.goalsFor - a.goalsFor;
       });
-      const bestSecond = seconds[0];
+      // Le meilleur 2ème ne doit pas provenir de la poule du 1er de la demi 1 (sinon une poule joue contre elle-même)
+      const first0Pool = poolRankings.length > 0 ? poolRankings[0] : null;
+      const bestSecond = seconds.find(s => !first0Pool || !first0Pool.some(r => r.teamId === s.teamId)) || seconds[0];
       semiMatches[0].teamAId = firsts[0] ? firsts[0].teamId : null;
       semiMatches[0].teamBId = bestSecond ? bestSecond.teamId : null;
 
@@ -1782,47 +1858,37 @@ function advanceKnockoutRounds(sport) {
   if (sport.type === "race") return;
 
   // 0. 8èmes -> Quarts
+  // Règle : si un match amont n'a pas de vainqueur (pas joué OU match nul), le slot aval est
+  // VIDÉ (null) — sinon un ancien vainqueur restait affiché en aval après édition du score.
   const eighths = sport.matches.filter(m => m.phase === "HUITIEME");
   const quarters = sport.matches.filter(m => m.phase === "QUART");
   if (eighths.length === 8 && quarters.length === 4) {
     for (let q = 0; q < 4; q++) {
-      const wA = getMatchWinnerId(eighths[q * 2]);
-      const wB = getMatchWinnerId(eighths[q * 2 + 1]);
-      if (wA) quarters[q].teamAId = wA;
-      if (wB) quarters[q].teamBId = wB;
+      quarters[q].teamAId = getMatchWinnerId(eighths[q * 2]);
+      quarters[q].teamBId = getMatchWinnerId(eighths[q * 2 + 1]);
     }
   }
 
   // 1. Quarts -> Demis
   const semis = sport.matches.filter(m => m.phase === "DEMI");
   if (quarters.length === 4 && semis.length === 2) {
-    const q1W = getMatchWinnerId(quarters[0]);
-    const q2W = getMatchWinnerId(quarters[1]);
-    const q3W = getMatchWinnerId(quarters[2]);
-    const q4W = getMatchWinnerId(quarters[3]);
-
-    if (q1W) semis[0].teamAId = q1W;
-    if (q2W) semis[0].teamBId = q2W;
-    if (q3W) semis[1].teamAId = q3W;
-    if (q4W) semis[1].teamBId = q4W;
+    semis[0].teamAId = getMatchWinnerId(quarters[0]);
+    semis[0].teamBId = getMatchWinnerId(quarters[1]);
+    semis[1].teamAId = getMatchWinnerId(quarters[2]);
+    semis[1].teamBId = getMatchWinnerId(quarters[3]);
   }
 
   // 2. Demis -> Petite Finale & Grande Finale
   const pf = sport.matches.find(m => m.phase === "PETITE_FINALE");
   const finale = sport.matches.find(m => m.phase === "FINALE");
   if (semis.length === 2) {
-    const w1 = getMatchWinnerId(semis[0]);
-    const l1 = getMatchLoserId(semis[0]);
-    const w2 = getMatchWinnerId(semis[1]);
-    const l2 = getMatchLoserId(semis[1]);
-
     if (finale) {
-      if (w1) finale.teamAId = w1;
-      if (w2) finale.teamBId = w2;
+      finale.teamAId = getMatchWinnerId(semis[0]);
+      finale.teamBId = getMatchWinnerId(semis[1]);
     }
     if (pf) {
-      if (l1) pf.teamAId = l1;
-      if (l2) pf.teamBId = l2;
+      pf.teamAId = getMatchLoserId(semis[0]);
+      pf.teamBId = getMatchLoserId(semis[1]);
     }
   }
 
@@ -1850,23 +1916,28 @@ function getMatchLoserId(m) {
 // Mise à jour automatique du stade maximum atteint par chaque équipe :
 // Règle : Une équipe en phase de poule qui ne passe pas n'obtient AUCUN point (0 pt).
 // Elle obtient des points uniquement lorsqu'elle passe la phase et entre dans le tableau éliminatoire :
-// • 8ème : 1 pts • Quart : 2 pts • Demi : 3 pts • Finale : 4 pts • Gagnant : 5 pts
+// • 8ème : 1 pt • Quart : 2 pts • Demi : 4 pts • Finale : 5 pts • Vainqueur : 7 pts (voir POINTS_SCALE)
 function recalculateSportStages(sport) {
   if (!sport.initialized) return;
 
   const stageRankOrder = ["POULE", "HUITIEME", "QUART", "DEMI", "FINALE", "GAGNANT"];
   const upgradeStage = (team, newStage) => {
     if (!team || !team.active) return;
-    const curIdx = stageRankOrder.indexOf(team.stageReached || "POULE");
+    // Un stade saisi MANUELLEMENT par l'admin fait office de plancher :
+    // le recalcul ne peut pas le faire régresser (avant : retour forcé à POULE à chaque saisie de score)
+    const manualIdx = team.manualStage ? stageRankOrder.indexOf(team.manualStage) : -1;
+    const curIdx = Math.max(stageRankOrder.indexOf(team.stageReached || "POULE"), manualIdx);
     const newIdx = stageRankOrder.indexOf(newStage);
     if (newIdx > curIdx) {
       team.stageReached = newStage;
     }
   };
 
-  // Par défaut, toute équipe active commence à POULE (0 pt)
+  // Par défaut, toute équipe active commence à POULE (0 pt), sauf plancher manuel
   sport.teams.forEach(t => {
-    if (t.active) t.stageReached = "POULE";
+    if (!t.active) return;
+    const manualIdx = t.manualStage ? stageRankOrder.indexOf(t.manualStage) : -1;
+    t.stageReached = manualIdx >= 0 ? t.manualStage : "POULE";
   });
 
   if (sport.type !== "race") {
@@ -2025,6 +2096,12 @@ function getNextMatchesForProjection(state, selectedSportFilter) {
 // ============================================================================
 // EXPORT DU PLANNING AU FORMAT EXCEL (.XLS)
 // ============================================================================
+// Neutralise l'injection de formules Excel (=, +, -, @, tab, CR) dans les cellules
+function xlsCell(value) {
+  const s = escapeHtml(value);
+  return /^[=+\-@\t\r]/.test(String(value ?? "")) ? "'" + s : s;
+}
+
 function exportSportScheduleToExcel(sport) {
   if (!sport.initialized || sport.matches.length === 0) {
     alert("Veuillez d'abord initialiser le planning de ce sport avant de l'exporter.");
@@ -2045,23 +2122,23 @@ function exportSportScheduleToExcel(sport) {
     if (m.isRace) {
       const runners = (m.raceTeamIds || []).map((tid, idx) => {
         const info = getTeamInfo(tid, "Qualifié");
-        return `<span style="background:${info.hex}; color:${info.textHex}; padding:2px 6px; border-radius:4px; font-weight:bold;">C${idx + 1}: ${info.name}</span>`;
+        return `<span style="background:${info.hex}; color:${info.textHex}; padding:2px 6px; border-radius:4px; font-weight:bold;">C${idx + 1}: ${xlsCell(info.name)}</span>`;
       }).join(" &nbsp; ");
 
       const resultStr = Object.entries(m.raceResults || {}).map(([tid, r]) => {
         const info = getTeamInfo(tid);
-        return `${info.name}: ${r}`;
+        return `${xlsCell(info.name)}: ${xlsCell(r)}`;
       }).join(", ");
 
       return `
         <tr>
           <td style="text-align:center; font-weight:bold; background:#f8fafc;">${m.order}</td>
-          <td style="text-align:center; font-weight:bold; background:#f1f5f9;">${m.time}</td>
-          <td style="background:#ffffff;">${m.pitch}</td>
-          <td style="background:#ffffff; font-weight:bold;">${m.phase} - ${m.label}</td>
+          <td style="text-align:center; font-weight:bold; background:#f1f5f9;">${xlsCell(m.time)}</td>
+          <td style="background:#ffffff;">${xlsCell(m.pitch)}</td>
+          <td style="background:#ffffff; font-weight:bold;">${xlsCell(m.phase)} - ${xlsCell(m.label)}</td>
           <td colspan="5" style="background:#ffffff;">${runners}</td>
-          <td style="text-align:center; background:#f8fafc; font-weight:bold;">${resultStr || "À courir"}</td>
-          <td style="background:#ffffff;">${m.referee || "Chrono BDS"}</td>
+          <td style="text-align:center; background:#f8fafc; font-weight:bold;">${xlsCell(resultStr) || "À courir"}</td>
+          <td style="background:#ffffff;">${xlsCell(m.referee || "Chrono BDS")}</td>
           <td style="background:#ffffff;"></td>
         </tr>
       `;
@@ -2070,8 +2147,8 @@ function exportSportScheduleToExcel(sport) {
     const teamA = getTeamInfo(m.teamAId, m.placeholderA);
     const teamB = getTeamInfo(m.teamBId, m.placeholderB);
 
-    const scoreA = (m.scoreA !== null && m.scoreA !== undefined) ? m.scoreA : "";
-    const scoreB = (m.scoreB !== null && m.scoreB !== undefined) ? m.scoreB : "";
+    const scoreA = (m.scoreA !== null && m.scoreA !== undefined && Number.isFinite(Number(m.scoreA))) ? Number(m.scoreA) : "";
+    const scoreB = (m.scoreB !== null && m.scoreB !== undefined && Number.isFinite(Number(m.scoreB))) ? Number(m.scoreB) : "";
 
     let winner = "";
     if (scoreA !== "" && scoreB !== "") {
@@ -2083,16 +2160,16 @@ function exportSportScheduleToExcel(sport) {
     return `
       <tr>
         <td style="text-align:center; font-weight:bold; background:#f8fafc;">${m.order}</td>
-        <td style="text-align:center; font-weight:bold; background:#f1f5f9; color:#0f172a;">${m.time}</td>
-        <td style="background:#ffffff;">${m.pitch}</td>
-        <td style="background:#ffffff; font-weight:600;">${m.label}</td>
-        <td style="background:${teamA.hex}; color:${teamA.textHex}; font-weight:bold; padding:6px 10px;">${teamA.name}</td>
+        <td style="text-align:center; font-weight:bold; background:#f1f5f9; color:#0f172a;">${xlsCell(m.time)}</td>
+        <td style="background:#ffffff;">${xlsCell(m.pitch)}</td>
+        <td style="background:#ffffff; font-weight:600;">${xlsCell(m.label)}</td>
+        <td style="background:${teamA.hex}; color:${teamA.textHex}; font-weight:bold; padding:6px 10px;">${xlsCell(teamA.name)}</td>
         <td style="text-align:center; font-weight:900; font-size:1.15em; background:#f8fafc; border:2px solid #94a3b8; width:55px;">${scoreA}</td>
         <td style="text-align:center; font-weight:bold; color:#64748b; background:#f1f5f9;">VS</td>
         <td style="text-align:center; font-weight:900; font-size:1.15em; background:#f8fafc; border:2px solid #94a3b8; width:55px;">${scoreB}</td>
-        <td style="background:${teamB.hex}; color:${teamB.textHex}; font-weight:bold; padding:6px 10px;">${teamB.name}</td>
-        <td style="background:#ffffff; font-style:italic;">${m.referee || "À désigner"}</td>
-        <td style="background:#ffffff; font-weight:bold; color:${theme.color};">${winner}</td>
+        <td style="background:${teamB.hex}; color:${teamB.textHex}; font-weight:bold; padding:6px 10px;">${xlsCell(teamB.name)}</td>
+        <td style="background:#ffffff; font-style:italic;">${xlsCell(m.referee || "À désigner")}</td>
+        <td style="background:#ffffff; font-weight:bold; color:${theme.color};">${xlsCell(winner)}</td>
         <td style="background:#ffffff;"></td>
       </tr>
     `;
@@ -2110,9 +2187,9 @@ function exportSportScheduleToExcel(sport) {
     const pts = POINTS_SCALE[t.stageReached] || 0;
     teamsRowsHtml += `
       <tr>
-        <td style="font-weight:bold; background:#ffffff;">${t.name}</td>
-        <td style="background:${f.hex}; color:${f.textHex || '#000000'}; font-weight:bold; text-align:center;">${f.name}</td>
-        <td style="text-align:center; background:#ffffff;">${STAGE_LABELS[t.stageReached] || t.stageReached || "Poule"}</td>
+        <td style="font-weight:bold; background:#ffffff;">${xlsCell(t.name)}</td>
+        <td style="background:${f.hex}; color:${f.textHex || '#000000'}; font-weight:bold; text-align:center;">${xlsCell(f.name)}</td>
+        <td style="text-align:center; background:#ffffff;">${xlsCell(STAGE_LABELS[t.stageReached] || t.stageReached || "Poule")}</td>
         <td style="text-align:center; font-weight:900; background:#f1f5f9; color:${theme.color};">${pts} pt(s)</td>
       </tr>
     `;
@@ -2133,12 +2210,12 @@ function exportSportScheduleToExcel(sport) {
       </style>
     </head>
     <body>
-      <h1>🏆 TOURNOI INTER-PROMO (TIP) — PLANNING OFFICIEL : ${sport.name.toUpperCase()}</h1>
+      <h1>🏆 TOURNOI INTER-PROMO (TIP) — PLANNING OFFICIEL : ${escapeHtml(sport.name.toUpperCase())}</h1>
       <div class="rule-box">
-        <b>Créneaux horaires :</b> ${sport.startTime} - ${sport.endTime} &nbsp;•&nbsp; 
-        <b>Durée des rencontres :</b> ${sport.matchDuration} min &nbsp;•&nbsp; 
+        <b>Créneaux horaires :</b> ${escapeHtml(sport.startTime)} - ${escapeHtml(sport.endTime)} &nbsp;•&nbsp;
+        <b>Durée des rencontres :</b> ${sport.matchDuration} min &nbsp;•&nbsp;
         <b>Barème officiel :</b> 8ème: 1 pt • Quart: 2 pts • Demi: 4 pts • Finale: 5 pts • Vainqueur: 7 pts (Poules: 3V - 2N - 1D)
-        <br/><i>Note terrain : ${sport.excelNote || "Respectez impérativement le temps de jeu pour libérer les terrains à 13h10."}</i>
+        <br/><i>Note terrain : ${escapeHtml(sport.excelNote || "Respectez impérativement le temps de jeu pour libérer les terrains à 13h10.")}</i>
       </div>
 
       ${poolMatches.length > 0 ? `
@@ -2191,7 +2268,7 @@ function exportSportScheduleToExcel(sport) {
         </table>
       ` : ''}
 
-      <h2>ÉQUIPES ENGAGÉES & POINTS ACQUIS (${sport.name.toUpperCase()})</h2>
+      <h2>ÉQUIPES ENGAGÉES & POINTS ACQUIS (${escapeHtml(sport.name.toUpperCase())})</h2>
       <table style="max-width: 750px;">
         <thead>
           <tr>
@@ -2213,7 +2290,7 @@ function exportSportScheduleToExcel(sport) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `Planning_${sport.name.replace(/\s+/g, "_")}.xls`;
+  a.download = `Planning_${String(sport.name).replace(/[^\w-]+/g, "_")}.xls`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
