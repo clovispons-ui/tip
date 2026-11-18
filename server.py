@@ -65,12 +65,28 @@ STATE_FILE = os.path.join(DATA_DIR, 'tournament_state.json')
 # ============================================================================
 # 🔒 SÉCURITÉ : jeton d'administration requis pour TOUTE écriture (POST /api/*)
 # ============================================================================
-DEFAULT_ADMIN_PASSWORD = 'BDSBDEBAR'  # ⚠️ à remplacer via ADMIN_PASSWORD
-ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD') or DEFAULT_ADMIN_PASSWORD
+# ⚠️ Mot de passe de DÉMONSTRATION uniquement si ADMIN_PASSWORD n'est pas défini.
+# Toujours lancer en production avec : ADMIN_PASSWORD=... python3 server.py
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD') or 'CHANGE_ME_DEMO_PASSWORD'
 EXPECTED_ADMIN_TOKEN = hashlib.sha256((ADMIN_PASSWORD + '_TIP_AUTH_OK').encode('utf-8')).hexdigest()
 MAX_BODY_SIZE = 2 * 1024 * 1024  # 2 Mo max par requête POST
 MAX_SSE_CLIENTS = 200
 FLASH_LEVELS = {'urgent', 'info', 'call'}
+# Rate limiting très léger sur /api/login (anti brute force basique)
+LOGIN_WINDOW_MS = 60 * 1000
+LOGIN_MAX_ATTEMPTS = 20
+_login_attempts = []
+_login_lock = threading.Lock()
+
+def login_rate_limited():
+    now = time.time() * 1000
+    with _login_lock:
+        while _login_attempts and now - _login_attempts[0] > LOGIN_WINDOW_MS:
+            _login_attempts.pop(0)
+        if len(_login_attempts) >= LOGIN_MAX_ATTEMPTS:
+            return True
+        _login_attempts.append(now)
+        return False
 
 # Fichiers statiques autorisés (liste blanche : .git, .bin, data/, etc. ne sont JAMAIS servis)
 STATIC_ALLOWLIST = {
@@ -407,7 +423,31 @@ class TIPRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
-        # Toute écriture nécessite le jeton admin
+        # Connexion admin : le serveur vérifie le mot de passe et renvoie le jeton de session.
+        if path == '/api/login':
+            if login_rate_limited():
+                send_json(self, 429, {"error": "Trop de tentatives, réessayez dans une minute"})
+                return
+            body = self.read_body()
+            if body is None:
+                send_json(self, 413, {"error": "Payload trop volumineux ou illisible (max 2 Mo)"})
+                return
+            try:
+                payload = json.loads(body)
+            except Exception:
+                send_json(self, 400, {"error": "Format JSON invalide"})
+                return
+            password = payload.get('password') if isinstance(payload, dict) else None
+            password = password if isinstance(password, str) else ''
+            candidate = hashlib.sha256((password + '_TIP_AUTH_OK').encode('utf-8')).hexdigest()
+            if password and hmac.compare_digest(candidate, EXPECTED_ADMIN_TOKEN):
+                log("🔓 Connexion admin réussie")
+                send_json(self, 200, {"ok": True, "token": EXPECTED_ADMIN_TOKEN})
+            else:
+                send_json(self, 401, {"ok": False, "error": "Mot de passe incorrect"})
+            return
+
+        # Toute autre écriture nécessite le jeton admin
         if not is_admin_request(self):
             send_json(self, 401, {"error": "Non autorisé"})
             return
@@ -523,7 +563,7 @@ def main():
         print(f"   - Accès Direct    : http://{LOCAL_IP}:{PORT}/index.html")
     print("\n✨ Le QR Code officiel s'affiche automatiquement sur le vidéoprojecteur !")
     if not os.environ.get('ADMIN_PASSWORD'):
-        print("\n⚠️  ADMIN_PASSWORD non défini : le mot de passe admin par défaut est utilisé.")
+        print("\n⚠️  ADMIN_PASSWORD non défini : un mot de passe de DÉMONSTRATION est utilisé. Définissez ADMIN_PASSWORD=... au lancement.")
         print("   Pour sécuriser l'accès API (recommandé) : ADMIN_PASSWORD=votremotdepasse python3 server.py")
     print("===============================================================\n")
     try:

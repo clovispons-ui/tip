@@ -62,24 +62,17 @@
       <div style="font-size: 2.5rem; text-align: center; margin-bottom: 0.5rem;">🔑</div>
       <h2 style="text-align: center; margin-bottom: 0.35rem;">Changer le mot de passe</h2>
       <p style="text-align: center; color: var(--text-muted); font-size: 0.88rem; margin-bottom: 1.25rem;">
-        Le mot de passe sera sécurisé et haché en SHA-256 (jamais stocké en clair).
+        Le mot de passe administrateur se définit au <b>lancement du serveur</b>, côté serveur uniquement
+        (aucun mot de passe ni empreinte n'est jamais stocké dans le navigateur) :<br/>
+        <code style="font-size:0.85rem;">ADMIN_PASSWORD=nouveau_mot_de_passe ./start.sh</code>
       </p>
 
       <form onsubmit="handlePasswordChangeSubmit(event)" style="display:flex; flex-direction:column; gap:0.85rem;">
-        <div>
-          <label style="display:block; font-size:0.85rem; color:var(--text-muted); margin-bottom:0.25rem;">Nouveau mot de passe :</label>
-          <input type="password" id="new-pwd-input" required minlength="3" placeholder="Nouveau mot de passe..." style="width:100%;" />
-        </div>
-        <div>
-          <label style="display:block; font-size:0.85rem; color:var(--text-muted); margin-bottom:0.25rem;">Confirmez le nouveau mot de passe :</label>
-          <input type="password" id="confirm-pwd-input" required minlength="3" placeholder="Confirmez le mot de passe..." style="width:100%;" />
-        </div>
         <div id="pwd-change-error" style="color:var(--accent-danger); font-size:0.85rem; display:none;"></div>
         <div id="pwd-change-success" style="color:var(--accent-success); font-size:0.85rem; display:none;"></div>
 
         <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
-          <button type="submit" class="btn btn-primary" style="flex:1; justify-content:center;">Enregistrer</button>
-          <button type="button" class="btn" onclick="closePasswordChangeModal()">Annuler</button>
+          <button type="button" class="btn" style="flex:1; justify-content:center;" onclick="closePasswordChangeModal()">Fermer</button>
         </div>
       </form>
     </div>
@@ -103,7 +96,7 @@
         <span class="btn-icon">☀️</span>
         <span class="btn-text">Thème</span>
       </button>
-      <button class="header-btn" onclick="openPasswordChangeModal()" title="Modifier le mot de passe administrateur">
+      <button class="header-btn" onclick="openPasswordChangeModal()" title="Le mot de passe se change au lancement du serveur (ADMIN_PASSWORD=... ./start.sh)">
         <span class="btn-icon">🔑</span>
         <span class="btn-text">Mot de passe</span>
       </button>
@@ -381,18 +374,22 @@
   <script>
     let currentSportId = null;
 
-    // 1. Authentification sécurisée (SHA-256)
+    // 1. Authentification : le mot de passe est vérifié PAR LE SERVEUR (POST /api/login),
+    // qui renvoie le jeton de session utilisé ensuite pour toutes les écritures API.
     function handleAdminLogin(e) {
       e.preventDefault();
       const val = document.getElementById("admin-pwd-input").value;
-      if (verifyAdminPassword(val)) {
-        sessionStorage.setItem("ADMIN_AUTH_TOKEN", sha256(val + "_TIP_AUTH_OK"));
-        document.getElementById("login-modal").classList.add("hidden");
-        document.getElementById("login-error").style.display = "none";
-        document.getElementById("admin-pwd-input").value = "";
-      } else {
-        document.getElementById("login-error").style.display = "block";
-      }
+      const errEl = document.getElementById("login-error");
+      errEl.style.display = "none";
+      loginAdmin(val).then(res => {
+        if (res.success) {
+          document.getElementById("login-modal").classList.add("hidden");
+          document.getElementById("admin-pwd-input").value = "";
+        } else {
+          errEl.textContent = res.message || "Mot de passe incorrect.";
+          errEl.style.display = "block";
+        }
+      });
     }
 
     function checkAuth() {
@@ -423,32 +420,11 @@
 
     function handlePasswordChangeSubmit(e) {
       e.preventDefault();
-      const p1 = document.getElementById("new-pwd-input").value;
-      const p2 = document.getElementById("confirm-pwd-input").value;
+      // Le mot de passe se change côté serveur (ADMIN_PASSWORD au lancement du serveur).
       const errEl = document.getElementById("pwd-change-error");
-      const succEl = document.getElementById("pwd-change-success");
-
-      if (p1 !== p2) {
-        errEl.textContent = "Les deux mots de passe ne correspondent pas.";
-        errEl.style.display = "block";
-        succEl.style.display = "none";
-        return;
-      }
-
-      const res = changeAdminPassword(p1);
-      if (res.success) {
-        sessionStorage.setItem("ADMIN_AUTH_TOKEN", sha256(p1 + "_TIP_AUTH_OK"));
-        succEl.innerHTML = "✅ Mot de passe modifié avec succès !<br/><span style='font-size:0.75rem; color:var(--text-muted);'>Empreinte SHA-256 enregistrée dans le navigateur.</span>";
-        succEl.style.display = "block";
-        errEl.style.display = "none";
-        setTimeout(() => {
-          closePasswordChangeModal();
-        }, 1500);
-      } else {
-        errEl.textContent = res.message;
-        errEl.style.display = "block";
-        succEl.style.display = "none";
-      }
+      const res = changeAdminPassword();
+      errEl.textContent = res.message;
+      errEl.style.display = "block";
     }
 
     // 2. Navigation

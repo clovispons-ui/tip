@@ -51,14 +51,27 @@ const STATE_FILE = path.join(DATA_DIR, 'tournament_state.json');
 // Le client calcule sha256(motDePasse + "_TIP_AUTH_OK") à la connexion admin
 // (voir admin.html) et l'envoie dans l'en-tête X-Admin-Token.
 // ============================================================================
-const DEFAULT_ADMIN_PASSWORD = 'BDSBDEBAR'; // ⚠️ à remplacer via ADMIN_PASSWORD
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
+// ⚠️ Mot de passe de DÉMONSTRATION uniquement si ADMIN_PASSWORD n'est pas défini.
+// Toujours lancer en production avec : ADMIN_PASSWORD=... node server.js
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'CHANGE_ME_DEMO_PASSWORD';
 const EXPECTED_ADMIN_TOKEN = crypto.createHash('sha256')
   .update(ADMIN_PASSWORD + '_TIP_AUTH_OK')
   .digest('hex');
 const MAX_BODY_SIZE = 2 * 1024 * 1024; // 2 Mo max par requête POST
 const MAX_SSE_CLIENTS = 200;
 const FLASH_LEVELS = new Set(['urgent', 'info', 'call']);
+// Rate limiting très léger sur /api/login (anti brute force basique)
+const LOGIN_WINDOW_MS = 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 20;
+const loginAttempts = []; // timestamps des tentatives récentes
+
+function loginRateLimited() {
+  const now = Date.now();
+  while (loginAttempts.length && now - loginAttempts[0] > LOGIN_WINDOW_MS) loginAttempts.shift();
+  if (loginAttempts.length >= LOGIN_MAX_ATTEMPTS) return true;
+  loginAttempts.push(now);
+  return false;
+}
 
 // Fichiers statiques autorisés (liste blanche : .git, .bin, data/, etc. ne sont JAMAIS servis)
 const STATIC_ALLOWLIST = new Set([
@@ -340,6 +353,28 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Connexion admin : le serveur vérifie le mot de passe et renvoie le jeton de session.
+  // C'est la SEULE source de vérité du mot de passe (plus de hash côté client).
+  if (url.pathname === '/api/login' && req.method === 'POST') {
+    if (loginRateLimited()) {
+      sendJson(res, 429, { error: 'Trop de tentatives, réessayez dans une minute' });
+      return;
+    }
+    readJsonBody(req, res, (payload) => {
+      const password = payload && typeof payload.password === 'string' ? payload.password : '';
+      const candidate = crypto.createHash('sha256').update(password + '_TIP_AUTH_OK').digest('hex');
+      const a = Buffer.from(candidate, 'utf-8');
+      const b = Buffer.from(EXPECTED_ADMIN_TOKEN, 'utf-8');
+      if (password && a.length === b.length && crypto.timingSafeEqual(a, b)) {
+        log('🔓 Connexion admin réussie');
+        sendJson(res, 200, { ok: true, token: EXPECTED_ADMIN_TOKEN });
+      } else {
+        sendJson(res, 401, { ok: false, error: 'Mot de passe incorrect' });
+      }
+    });
+    return;
+  }
+
   // Enregistrement de l'état partagé (admin authentifié uniquement)
   if (url.pathname === '/api/state' && req.method === 'POST') {
     if (!isAdminRequest(req)) {
@@ -617,7 +652,7 @@ server.listen(PORT, '0.0.0.0', () => {
   }
   console.log(`\n✨ Le QR Code officiel s'affiche automatiquement sur le vidéoprojecteur !`);
   if (!process.env.ADMIN_PASSWORD) {
-    console.log(`\n⚠️  ADMIN_PASSWORD non défini : le mot de passe admin par défaut est utilisé.`);
+    console.log(`\n⚠️  ADMIN_PASSWORD non défini : un mot de passe de DÉMONSTRATION est utilisé. Définissez ADMIN_PASSWORD=... au lancement.`);
     console.log(`   Pour sécuriser l'accès API (recommandé) : ADMIN_PASSWORD= votremotdepasse node server.js`);
   }
   console.log('===============================================================\n');

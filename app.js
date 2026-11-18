@@ -5,15 +5,13 @@
    ========================================================================== */
 
 // ============================================================================
-// 🔒 SÉCURITÉ & AUTHENTIFICATION ADMIN (HASH CRYPTOGRAPHIQUE SHA-256)
-// Le mot de passe n'est JAMAIS stocké en clair dans le code.
-// ⚠️ Empreinte par défaut d'un mot de passe DE DÉMONSTRATION : elle correspond à
-// une valeur connue publiquement. Le serveur exige de toute façon le jeton
-// X-Admin-Token (sha256(motDePasse + "_TIP_AUTH_OK")) pour toute écriture API ;
-// définissez ADMIN_PASSWORD=... au lancement pour choisir le vrai mot de passe.
+// 🔒 SÉCURITÉ & AUTHENTIFICATION ADMIN
+// Le mot de passe est vérifié UNIQUEMENT par le serveur (POST /api/login),
+// qui renvoie le jeton de session X-Admin-Token exigé pour toute écriture API.
+// Aucun hash de mot de passe n'est jamais stocké ni calculé côté client.
+// Le mot de passe se définit au lancement : ADMIN_PASSWORD=... ./start.sh
 // ============================================================================
-const DEFAULT_ADMIN_PASSWORD_HASH = "7402c4886baceceb680a9aaf6260d94fd53da013eb59502c8c6e03e4a49b50e0";
-const ADMIN_HASH_STORAGE_KEY = "TIP_ADMIN_CUSTOM_HASH";
+const ADMIN_TOKEN_STORAGE_KEY = "ADMIN_AUTH_TOKEN";
 
 // Fonction autonome de hachage SHA-256 (standard universel, compatible tout navigateur)
 function sha256(ascii) {
@@ -73,31 +71,31 @@ function sha256(ascii) {
   return result;
 }
 
-function getAdminPasswordHash() {
-  try {
-    return localStorage.getItem(ADMIN_HASH_STORAGE_KEY) || DEFAULT_ADMIN_PASSWORD_HASH;
-  } catch (e) {
-    return DEFAULT_ADMIN_PASSWORD_HASH;
-  }
+// Connexion admin côté serveur : renvoie une Promise résolue avec le jeton de session.
+function loginAdmin(password) {
+  return fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password })
+  })
+    .then(res => res.json().then(data => ({ status: res.status, data })))
+    .then(({ status, data }) => {
+      if (status === 200 && data && data.ok && data.token) {
+        try { sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, data.token); } catch (e) {}
+        return { success: true, token: data.token };
+      }
+      return { success: false, message: (data && data.error) || "Mot de passe incorrect" };
+    })
+    .catch(() => ({ success: false, message: "Serveur injoignable — lancez ./start.sh" }));
 }
 
-function verifyAdminPassword(inputPassword) {
-  if (!inputPassword) return false;
-  const inputHash = sha256(inputPassword);
-  return inputHash === getAdminPasswordHash();
+function getAdminToken() {
+  try { return sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || ""; } catch (e) { return ""; }
 }
 
-function changeAdminPassword(newPassword) {
-  if (!newPassword || newPassword.length < 3) {
-    return { success: false, message: "Le mot de passe doit comporter au moins 3 caractères." };
-  }
-  const newHash = sha256(newPassword);
-  try {
-    localStorage.setItem(ADMIN_HASH_STORAGE_KEY, newHash);
-  } catch (e) {
-    console.error(e);
-  }
-  return { success: true, hash: newHash };
+// Le mot de passe se change au niveau du serveur (variable ADMIN_PASSWORD au lancement)
+function changeAdminPassword() {
+  return { success: false, message: "Le mot de passe se change désormais au lancement du serveur : relancez avec ADMIN_PASSWORD=nouveau ./start.sh" };
 }
 // ============================================================================
 
@@ -611,7 +609,7 @@ function saveState(state) {
 
 // En-têtes des requêtes d'écriture API : le jeton admin (calculé à la connexion) est exigé par le serveur
 function adminApiHeaders() {
-  const token = (typeof sessionStorage !== "undefined" && sessionStorage.getItem("ADMIN_AUTH_TOKEN")) || "";
+  const token = getAdminToken();
   return { "Content-Type": "application/json", "X-Admin-Token": token };
 }
 
