@@ -2,12 +2,93 @@
 # ==============================================================================
 # SCRIPT DE LANCEMENT EN UN CLIC - TOURNOI INTER-FILIÈRES (TIP)
 # Démarre le serveur local et le tunnel 4G public pour l'accès smartphone
+#
+# Usage :
+#   ./start.sh              (ou ./start.sh start)  -> démarre le serveur
+#   ./start.sh stop                                   -> arrête le serveur
+#   ./start.sh restart                                -> redémarre
+#   ./start.sh status                                 -> état du serveur
+#   ./start.sh --no-tunnel                            -> démarre sans tunnel 4G
 # ==============================================================================
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+
+PID_FILE="$SCRIPT_DIR/.tip-server.pid"
+
+# ------------------------------------------------------------------------------
+# Utilitaires de gestion du processus
+# ------------------------------------------------------------------------------
+
+# Vrai si $1 est le PID d'un serveur TIP lancé depuis ce dossier
+is_tip_server_pid() {
+    local pid="$1"
+    [ -n "$pid" ] && [ -d "/proc/$pid" ] || return 1
+    tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null | grep -q "$SCRIPT_DIR/server\.\(js\|py\)"
+}
+
+server_pid() {
+    if [ -f "$PID_FILE" ]; then
+        local pid
+        pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+        if is_tip_server_pid "$pid"; then
+            echo "$pid"
+            return 0
+        fi
+    fi
+    # Repli : chercher dans la table des processus (pidfile absent ou périmé)
+    pgrep -f "$SCRIPT_DIR/server\.\(js\|py\)" 2>/dev/null | head -n 1
+}
+
+cmd_stop() {
+    local pid
+    pid="$(server_pid || true)"
+    if [ -z "$pid" ]; then
+        echo "ℹ️  Aucun serveur TIP en cours d'exécution."
+        rm -f "$PID_FILE"
+        return 0
+    fi
+    echo "🛑 Arrêt du serveur TIP (PID $pid)..."
+    kill "$pid" 2>/dev/null || true
+    # Attendre l'arrêt propre (max ~5s), puis forcer si nécessaire
+    local i
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        is_tip_server_pid "$pid" || break
+        sleep 0.5
+    done
+    if is_tip_server_pid "$pid"; then
+        echo "⚠️  Le processus ne s'arrête pas, envoi de SIGKILL..."
+        kill -9 "$pid" 2>/dev/null || true
+    fi
+    # Nettoyer un éventuel cloudflared restant lié à ce serveur
+    pkill -f "cloudflared tunnel --url http://127.0.0.1" 2>/dev/null || true
+    rm -f "$PID_FILE"
+    echo "✔ Serveur arrêté."
+}
+
+cmd_status() {
+    local pid
+    pid="$(server_pid || true)"
+    if [ -n "$pid" ]; then
+        echo "✔ Serveur TIP en cours d'exécution (PID $pid) : http://localhost:${PORT:-8080}/index.html"
+    else
+        echo "ℹ️  Serveur TIP arrêté."
+        return 1
+    fi
+}
+
+# Sous-commande éventuelle en premier argument
+CMD="${1:-start}"
+case "$CMD" in
+    stop)    cmd_stop;    exit 0 ;;
+    status)  cmd_status;  exit 0 ;;
+    restart) cmd_stop || true; shift; ;;
+    start)   shift ;;
+    *)       # pas une sous-commande : tout est transmis au serveur (ex: --no-tunnel)
+             ;;
+esac
 
 echo "==============================================================="
 echo "🏆  LANCEMENT DU TOURNOI INTER-FILIÈRES (TIP)"
@@ -79,6 +160,9 @@ echo "🚀 Démarrage du serveur TIP..."
 echo "---------------------------------------------------------------"
 
 # 3. Lancement du serveur selon l'environnement disponible
+# On écrit le PID juste avant exec : exec conserve le PID, donc le pidfile
+# désigne fiableMENT le processus serveur pour ./start.sh stop/status.
+echo $$ > "$PID_FILE"
 if [ "$USE_PYTHON" -eq 1 ]; then
     exec python3 "$SCRIPT_DIR/server.py" "$@"
 else
