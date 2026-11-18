@@ -226,8 +226,10 @@ class TIPRequestHandler(BaseHTTPRequestHandler):
         # En-têtes de sécurité (pas de CORS wildcard : toutes les requêtes sont same-origin)
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('X-Frame-Options', 'DENY')
+        # 'unsafe-inline' requis : l'appli repose sur des gestionnaires inline (onclick/onsubmit).
+        # La protection XSS repose sur l'échappement systématique des données (escapeHtml/escapeJsString).
         self.send_header('Content-Security-Policy',
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; media-src 'self'; object-src 'none'")
         super().end_headers()
 

@@ -268,7 +268,9 @@ const server = http.createServer((req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Content-Security-Policy',
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    // 'unsafe-inline' requis : l'appli repose sur des gestionnaires inline (onclick/onsubmit).
+    // La protection XSS repose sur l'échappement systématique des données (escapeHtml/escapeJsString).
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; media-src 'self'; object-src 'none'");
 
   if (req.method === 'OPTIONS') {
