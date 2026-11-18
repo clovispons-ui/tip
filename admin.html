@@ -218,19 +218,19 @@
             Barème : 8ème (1 pt) • Quart (2 pts) • Demi (4 pts) • Finale (5 pts) • Vainqueur (7 pts) • Poules : 3G / 2N / 1P
           </span>
         </div>
-        <div style="overflow-x:auto;">
-          <table class="admin-table">
+        <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
+          <table class="admin-table admin-standings-table" style="min-width:640px;">
             <thead>
               <tr>
                 <th style="width:50px;">Rang</th>
                 <th>Filière</th>
                 <th>Couleur</th>
-                <th>⚽ Foot</th>
-                <th>🏀 Basket</th>
-                <th>🏐 Volley</th>
-                <th>🏃 Relais</th>
-                <th>🤾 Dodgeball</th>
-                <th style="text-align:right;">Total Points</th>
+                <th style="white-space:nowrap;">Foot ⚽</th>
+                <th style="white-space:nowrap;">Basket 🏀</th>
+                <th style="white-space:nowrap;">Volley 🏐</th>
+                <th style="white-space:nowrap;">Relais 🏃</th>
+                <th style="white-space:nowrap;">Dodgeball 🤾</th>
+                <th style="text-align:right; white-space:nowrap;">Total Points</th>
               </tr>
             </thead>
             <tbody id="admin-standings-tbody"></tbody>
@@ -304,7 +304,7 @@
               Composez vos poules librement, puis cliquez sur <b>"⚡ Compléter & Mettre en forme"</b> pour générer automatiquement tous les matchs et les horaires.
             </span>
           </div>
-          <button class="btn btn-sm" id="toggle-composer-btn" onclick="togglePoolComposer()">Masquer ▾</button>
+          <button class="btn btn-sm" id="toggle-composer-btn" onclick="togglePoolComposer()">Afficher ▾</button>
         </div>
         <div id="pool-composer-content">
           <!-- Injecté dynamiquement par renderPoolComposer() -->
@@ -1047,19 +1047,22 @@
     // =========================================================================
     // COMPOSITION MANUELLE DES POULES (FONCTIONS ADMIN)
     // =========================================================================
-    let poolComposerCollapsed = false;
+    // Par défaut le compositeur est MASQUÉ (le bouton affiche "Afficher ▾")
+    let poolComposerCollapsed = true;
+
+    function syncPoolComposerButton() {
+      const content = document.getElementById("pool-composer-content");
+      const btn = document.getElementById("toggle-composer-btn");
+      if (content) {
+        if (poolComposerCollapsed) content.classList.add("hidden");
+        else content.classList.remove("hidden");
+      }
+      if (btn) btn.innerHTML = poolComposerCollapsed ? "Afficher ▾" : "Masquer ▴";
+    }
 
     function togglePoolComposer() {
       poolComposerCollapsed = !poolComposerCollapsed;
-      const content = document.getElementById("pool-composer-content");
-      const btn = document.getElementById("toggle-composer-btn");
-      if (poolComposerCollapsed) {
-        content.classList.add("hidden");
-        if (btn) btn.innerHTML = "Afficher ▾";
-      } else {
-        content.classList.remove("hidden");
-        if (btn) btn.innerHTML = "Masquer ▴";
-      }
+      syncPoolComposerButton();
     }
 
     function renderQualifiersOptions(sport) {
@@ -1105,6 +1108,8 @@
     function renderPoolComposer(sport) {
       const container = document.getElementById("pool-composer-content");
       if (!container) return;
+      // Synchronise l'état visuel (masqué/affiché + libellé du bouton) à chaque rendu
+      syncPoolComposerButton();
 
       if (!sport.pools || sport.pools.length === 0) {
         setSportPoolsCount(sport, 2);
