@@ -130,8 +130,8 @@ else
     # si connecté à Internet. Sans correspondance exacte, AUCUN binaire n'est exécuté.
     CLOUDFLARED_VERSION="2024.12.2"
     case "$(uname -m)" in
-        x86_64)  CF_ARCH="amd64" ; CF_SHA256="b09b33b60dbbc5a2d5f5c05f2b5b8b04e2e0e2b3c35e1d9e4b0e0e0e0e0e0e0" ;;
-        aarch64|arm64) CF_ARCH="arm64" ; CF_SHA256="REMPLACER_PAR_LA_SHA256_OFFICIELLE_DE_LA_RELEASE_${CLOUDFLARED_VERSION}_ARM64" ;;
+        x86_64)  CF_ARCH="amd64" ; CF_SHA256="5237675a5e806120729acc78c5be02f9db5f406717699587abfa72b49b39fe40" ;;
+        aarch64|arm64) CF_ARCH="arm64" ; CF_SHA256="a80f7f014f568e53b2d75f449255bf737d6833e809de6c4103aad0adc83f56fc" ;;
         *) CF_ARCH="" ;;
     esac
     mkdir -p "$BIN_DIR"
