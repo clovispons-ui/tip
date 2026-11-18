@@ -109,12 +109,20 @@ def is_admin_request(handler):
     return hmac.compare_digest(token, EXPECTED_ADMIN_TOKEN)
 
 def send_json(handler, status, obj):
-    body = json.dumps(obj).encode('utf-8')
-    handler.send_response(status)
-    handler.send_header('Content-Type', 'application/json; charset=utf-8')
-    handler.send_header('Content-Length', str(len(body)))
-    handler.end_headers()
-    handler.wfile.write(body)
+    # Si les en-têtes sont déjà expédiés (double appel, client parti), ne rien faire
+    if getattr(handler, '_headers_sent', False):
+        return
+    try:
+        body = json.dumps(obj).encode('utf-8')
+        handler.send_response(status)
+        handler.send_header('Content-Type', 'application/json; charset=utf-8')
+        handler.send_header('Content-Length', str(len(body)))
+        handler.end_headers()
+        handler._headers_sent = True
+        handler.wfile.write(body)
+    except Exception as e:
+        handler._headers_sent = True
+        log(f"⚠️  Réponse abandonnée (client parti ?) : {e}")
 
 # Verrou global : toutes les lectures/écritures de l'état passent par lui
 state_lock = threading.Lock()
@@ -223,6 +231,7 @@ class TIPRequestHandler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
 
     def end_headers(self):
+        self._headers_sent = False
         # En-têtes de sécurité (pas de CORS wildcard : toutes les requêtes sont same-origin)
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('X-Frame-Options', 'DENY')
@@ -242,7 +251,11 @@ class TIPRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def read_body(self):
-        """Lit le corps avec limite de taille ; retourne None si trop volumineux ou illisible."""
+        """Lit le corps avec limite de taille ; renvoie None si trop volumineux ou illisible.
+
+        Renvoie la sentinelle '__ABORTED__' pour signaler 'lu mais déjà répondu'
+        (pas utilisé ; gardé pour compatibilité)."""
+
         try:
             length = int(self.headers.get('Content-Length', 0))
         except ValueError:
@@ -252,6 +265,7 @@ class TIPRequestHandler(BaseHTTPRequestHandler):
         try:
             return self.rfile.read(length).decode('utf-8')
         except Exception:
+            # Client déconnecté pendant la lecture : ne rien planter
             return None
 
     def do_GET(self):
@@ -418,7 +432,10 @@ class TIPRequestHandler(BaseHTTPRequestHandler):
         self.send_header('ETag', etag)
         self.send_header('Vary', 'Accept-Encoding')
         self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.wfile.write(data)
+        except Exception as e:
+            log(f"⚠️  Envoi interrompu (client parti ?) : {e}")
 
     def do_POST(self):
         global PUBLIC_URL, last_saved_state_updated

@@ -92,6 +92,12 @@ function isAdminRequest(req) {
 }
 
 function sendJson(res, status, obj) {
+  // Garde : ne jamais écrire des en-têtes sur une réponse déjà envoyée/détruite
+  // (évite ERR_HTTP_HEADERS_SENT qui faisait crasher tout le processus).
+  if (res.headersSent || res.writableEnded || res.destroyed) {
+    try { if (!res.writableEnded) res.end(); } catch (e) {}
+    return;
+  }
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(obj));
 }
@@ -100,26 +106,36 @@ function sendJson(res, status, obj) {
 function readJsonBody(req, res, onSuccess) {
   let body = '';
   let aborted = false;
+  let responded = false;
+  function respond(status, obj) {
+    if (responded) return;
+    responded = true;
+    sendJson(res, status, obj);
+  }
   req.on('data', chunk => {
+    if (aborted) return;
     body += chunk;
     if (body.length > MAX_BODY_SIZE) {
       aborted = true;
-      req.destroy();
+      // Arrêter de consommer et répondre une seule fois, sans détruire le socket
+      // (req.destroy() détruisait aussi la réponse et provoquait des writes tardifs).
+      req.removeAllListeners('data');
+      req.resume(); // drainer silencieusement le reste
+      respond(413, { error: 'Payload trop volumineux (max 2 Mo)' });
     }
   });
   req.on('end', () => {
-    if (aborted) {
-      sendJson(res, 413, { error: 'Payload trop volumineux (max 2 Mo)' });
-      return;
-    }
+    if (aborted) return;
     try {
       onSuccess(JSON.parse(body));
     } catch (e) {
-      sendJson(res, 400, { error: 'Format JSON invalide' });
+      respond(400, { error: 'Format JSON invalide' });
     }
   });
-  req.on('error', () => {
-    if (!res.headersSent) sendJson(res, 400, { error: 'Lecture du corps interrompue' });
+  req.on('error', (e) => {
+    if (aborted) return;
+    if (e && e.code === 'ERR_STREAM_PREMATURE_CLOSE') return; // client parti : ne rien faire
+    respond(400, { error: 'Lecture du corps interrompue' });
   });
 }
 
@@ -264,6 +280,8 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
+  // Ne jamais laisser une erreur d'écriture (client déconnecté) crasher le processus
+  res.on('error', () => {});
   // En-têtes de sécurité (pas de CORS wildcard : toutes les requêtes sont same-origin)
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
