@@ -1,0 +1,23 @@
+{
+  "name": "tip-tournoi-inter-filieres",
+  "version": "1.0.0",
+  "description": "Application web autonome du Tournoi Inter-Filières (TIP) avec suivi live 4G via QR Code et synchronisation temps réel",
+  "main": "tip/server.js",
+  "scripts": {
+    "start": "node tip/server.js",
+    "start:local": "node tip/server.js --no-tunnel",
+    "start:python": "python3 tip/server.py",
+    "test": "node tests/verify_local.js",
+    "check:readiness": "node tests/verify_readiness.js"
+  },
+  "keywords": [
+    "tip",
+    "tournament",
+    "live-scores",
+    "qr-code",
+    "4g-access",
+    "sse"
+  ],
+  "author": "Bureau des Sports (BDS)",
+  "license": "ISC"
+}

@@ -89,6 +89,11 @@
   <header class="top-bar">
     <div class="brand-title">
       <h1>🛠️ TIP - Administration</h1>
+      <div id="admin-4g-chip" class="tunnel-status-chip offline" title="Statut de l'accès 4G extérieur pour les smartphones">
+        <span class="status-dot"></span>
+        <span id="admin-4g-text">4G : Local</span>
+        <a id="admin-4g-link" href="#" target="_blank" style="display:none; color:inherit; text-decoration:underline; font-size:0.75rem; margin-left:4px;" title="Tester le lien mobile">Tester ↗</a>
+      </div>
     </div>
 
     <div id="admin-clock" class="clock-box">00:00:00</div>
@@ -120,6 +125,29 @@
   <main class="admin-container">
     <!-- VUE 1 : TABLEAU DE BORD GÉNÉRAL (ACCUEIL ADMIN) -->
     <div id="dashboard-view">
+      <!-- Raccourci vers la Page Arbitre & Contrôle Vidéoprojecteur -->
+      <div class="admin-section" style="background: linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(15, 23, 42, 0.6) 100%); border: 2px solid var(--accent-primary, #38bdf8);">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+          <div>
+            <h3 style="font-size:1.35rem; color:var(--text-main); display:flex; align-items:center; gap:0.5rem; margin:0;">
+              <span>⏱️</span> Marqueur de Score & Chrono Arbitre
+            </h3>
+            <p style="font-size:0.9rem; color:var(--text-muted); margin-top:0.3rem;">
+              Interface dédiée plein écran pour l'arbitre sur téléphone (couleurs auto par filière, +1 / -1, chronomètre, sonnerie automatique).
+            </p>
+          </div>
+          <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+            <a href="arbitre.html" target="_blank" class="btn btn-primary" style="font-weight:800; display:inline-flex; align-items:center; gap:0.4rem; padding:0.65rem 1.2rem;">
+              <span>📱 Ouvrir la Page Arbitre</span>
+              <span style="font-size:1.1rem;">↗</span>
+            </a>
+            <button id="live-proj-btn" class="btn btn-warning" onclick="toggleLiveScoreProjection()" style="font-weight:800; padding:0.65rem 1.1rem;">
+              📺 Afficher sur Vidéoprojecteur
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- Bannière Mode Pause Repas / Show POM-POM -->
       <div class="admin-section" style="background: linear-gradient(135deg, rgba(250, 204, 21, 0.12) 0%, rgba(0,0,0,0.4) 100%); border: 2px solid #facc15;">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
@@ -134,6 +162,47 @@
           <button id="pompom-toggle-btn" class="btn btn-lg" onclick="togglePompomMode()">
             <!-- Rempli dynamiquement par JS -->
           </button>
+        </div>
+      </div>
+
+      <!-- Section Flash Info & Alertes en Direct (Vidéoprojecteur & Mobiles) -->
+      <div class="admin-section admin-flash-box">
+        <div class="admin-flash-header">
+          <div>
+            <h3 style="font-size:1.35rem; color:var(--text-main); display:flex; align-items:center; gap:0.5rem;">
+              <span>📢</span> Flash Info & Alerte Plein Écran
+            </h3>
+            <p style="font-size:0.88rem; color:var(--text-muted); margin-top:0.25rem;">
+              Diffuse instantanément un message prioritaire en plein écran sur le vidéoprojecteur et fait sonner/vibrer les smartphones connectés.
+            </p>
+          </div>
+          <div id="admin-flash-status-badge" class="admin-flash-status inactive">
+            <span>⚪ Flash Info Inactif</span>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:0.85rem; margin-top:0.5rem;">
+          <textarea id="admin-flash-text" placeholder="Saisissez votre message prioritaire (ex: Équipes de Volleyball attendues immédiatement au COSEC)..." rows="2" style="width:100%; font-size:1.05rem; padding:0.75rem; border-radius:10px; background:var(--bg-input); color:var(--text-main); border:1px solid var(--border-color); font-family:var(--font-body);"></textarea>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.85rem;">
+            <div style="display:flex; align-items:center; gap:0.6rem;">
+              <label style="font-size:0.88rem; font-weight:700; color:var(--text-muted);">Niveau d'alerte :</label>
+              <select id="admin-flash-level" style="padding:0.45rem 0.75rem; border-radius:8px;">
+                <option value="urgent">🚨 Urgence / Retard (Rouge)</option>
+                <option value="info">ℹ️ Information Générale (Bleu)</option>
+                <option value="call">📢 Appel Capitaines / Arbitres (Orange)</option>
+              </select>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+              <button class="btn" onclick="handleTestChime()" title="Tester le signal sonore dans votre navigateur">
+                🔔 Tester le Son
+              </button>
+              <button id="admin-flash-toggle-btn" class="btn btn-primary btn-lg" onclick="handleToggleFlashInfo()">
+                🚀 Activer & Projeter le Flash Info
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -252,6 +321,11 @@
       <!-- BANNIÈRE ACTION : REMPLIR LES PHASES FINALES APRÈS LES POULES -->
       <div id="knockout-action-banner-container">
         <!-- Injecté par JS si sport initialisé -->
+      </div>
+
+      <!-- BARRE DE DÉCALAGE HORAIRE RAPIDE PAR SPORT & PAR TERRAIN -->
+      <div id="sport-shift-toolbar-container">
+        <!-- Injecté dynamiquement par JS -->
       </div>
 
       <!-- SECTION MATCHS PAR POULE (SÉPARÉS CLAIREMENT PAR POULE) -->
@@ -409,6 +483,10 @@
     function renderDashboard() {
       const state = loadState();
 
+      if (typeof renderLiveScoreSection === "function") {
+        renderLiveScoreSection();
+      }
+
       // Bouton Show Pom-pom
       const pompomBtn = document.getElementById("pompom-toggle-btn");
       if (state.pompomMode) {
@@ -417,6 +495,38 @@
       } else {
         pompomBtn.className = "btn btn-lg btn-warning";
         pompomBtn.innerHTML = "📣 Activer le Show POM-POM & Pause Repas (13h15)";
+      }
+
+      // Mise à jour de la boîte Flash Info
+      const flashBadge = document.getElementById("admin-flash-status-badge");
+      const flashToggleBtn = document.getElementById("admin-flash-toggle-btn");
+      const flashTextInput = document.getElementById("admin-flash-text");
+      const flashLevelSelect = document.getElementById("admin-flash-level");
+
+      const isFlashActive = Boolean(state.flashInfo && state.flashInfo.active);
+      if (flashBadge) {
+        if (isFlashActive) {
+          flashBadge.className = "admin-flash-status active";
+          flashBadge.innerHTML = "🔴 ACTIF SUR LE VIDÉOPROJECTEUR";
+        } else {
+          flashBadge.className = "admin-flash-status inactive";
+          flashBadge.innerHTML = "⚪ Flash Info Inactif";
+        }
+      }
+      if (flashToggleBtn) {
+        if (isFlashActive) {
+          flashToggleBtn.className = "btn btn-danger btn-lg";
+          flashToggleBtn.innerHTML = "🛑 Désactiver le Flash Info";
+        } else {
+          flashToggleBtn.className = "btn btn-primary btn-lg";
+          flashToggleBtn.innerHTML = "🚀 Activer & Projeter le Flash Info";
+        }
+      }
+      if (state.flashInfo && state.flashInfo.message && flashTextInput && document.activeElement !== flashTextInput) {
+        flashTextInput.value = state.flashInfo.message;
+      }
+      if (state.flashInfo && state.flashInfo.level && flashLevelSelect && document.activeElement !== flashLevelSelect) {
+        flashLevelSelect.value = state.flashInfo.level;
       }
 
       // Cartes de sport
@@ -538,6 +648,42 @@
       // Rendu du Compositeur de Poules
       renderPoolComposer(sport);
 
+      // Rendu de la barre de décalage horaire global par sport
+      const shiftContainer = document.getElementById("sport-shift-toolbar-container");
+      if (shiftContainer) {
+        if (sport.initialized && sport.matches && sport.matches.length > 0) {
+          const pitchesOptions = (sport.pitchNames || []).map(p => `<option value="${p}">${p}</option>`).join("");
+          shiftContainer.innerHTML = `
+            <div class="shift-schedule-bar">
+              <div class="shift-title">
+                <span>⏱️ Décalage horaire global (${sport.name}) :</span>
+                <span style="font-size:0.8rem; font-weight:normal; color:var(--text-muted);">(décale automatiquement les matchs restants)</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                <label style="font-size:0.85rem; color:var(--text-muted); font-weight:700;">Terrain :</label>
+                <select id="shift-pitch-filter" style="padding:0.35rem 0.55rem; font-size:0.85rem; border-radius:6px;">
+                  <option value="ALL">Tous les terrains</option>
+                  ${pitchesOptions}
+                </select>
+                <div class="shift-buttons-group">
+                  <button class="shift-btn btn-minus" onclick="handleShiftSchedule('${sport.id}', -10)" title="Avancer de 10 min">-10 min</button>
+                  <button class="shift-btn btn-minus" onclick="handleShiftSchedule('${sport.id}', -5)" title="Avancer de 5 min">-5 min</button>
+                  <button class="shift-btn btn-plus" onclick="handleShiftSchedule('${sport.id}', 5)" title="Décaler de 5 min">+5 min</button>
+                  <button class="shift-btn btn-plus" onclick="handleShiftSchedule('${sport.id}', 10)" title="Décaler de 10 min">+10 min</button>
+                  <button class="shift-btn btn-plus" onclick="handleShiftSchedule('${sport.id}', 15)" title="Décaler de 15 min">+15 min</button>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.3rem;">
+                  <input type="number" id="shift-custom-mins" placeholder="min" style="width:65px; padding:0.35rem; font-size:0.85rem; border-radius:6px;" />
+                  <button class="shift-btn" onclick="handleShiftCustom('${sport.id}')">Appliquer</button>
+                </div>
+              </div>
+            </div>
+          `;
+        } else {
+          shiftContainer.innerHTML = "";
+        }
+      }
+
       // Rendu des Poules & Matchs de poule (CLASSEMENT AFFICHÉ EN PLUS GROS)
       const poulesBlocksContainer = document.getElementById("poules-blocks-container");
       const totalPoolMatches = sport.matches.filter(m => m.phase === "POULE").length;
@@ -625,7 +771,7 @@
               </div>
 
               <!-- Layout : Classement de la poule en plus gros à gauche + Matchs à droite -->
-              <div style="display:grid; grid-template-columns: minmax(380px, 44%) 1fr; gap:1.6rem; align-items:start;">
+              <div class="poule-two-cols-layout">
                 <!-- Tableau Classement de la Poule (EN PLUS GROS) -->
                 <div class="poule-standings-card-large">
                   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
@@ -764,19 +910,35 @@
       `;
 
       return `
-        <tr>
-          <td style="font-weight:900;">${m.order}</td>
-          <td><input type="time" value="${m.time}" onchange="updateMatchField('${m.id}', 'time', this.value)" /></td>
-          ${isKnockout ? `<td><b>${m.label}</b></td>` : ""}
-          <td><input type="text" value="${m.pitch}" style="width:130px;" onchange="updateMatchField('${m.id}', 'pitch', this.value)" /></td>
-          <td>${selectA}</td>
-          <td style="text-align:center; white-space:nowrap;">
+        <tr class="admin-match-row">
+          <td class="admin-match-cell-order" style="font-weight:900;">Match #${m.order} ${isKnockout ? `• <b>${m.label}</b>` : ""}</td>
+          <td class="admin-match-cell-meta">
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+              <span style="font-size:0.8rem; color:var(--text-muted); font-weight:700;">🕒 Heure:</span>
+              <input type="time" value="${m.time}" onchange="updateMatchField('${m.id}', 'time', this.value)" />
+            </div>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+              <span style="font-size:0.8rem; color:var(--text-muted); font-weight:700;">📍 Terrain:</span>
+              <input type="text" value="${m.pitch}" style="width:130px;" onchange="updateMatchField('${m.id}', 'pitch', this.value)" />
+            </div>
+          </td>
+          <td class="admin-match-cell-teama">
+            <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; margin-bottom:2px;">Équipe A :</div>
+            ${selectA}
+          </td>
+          <td class="admin-match-cell-score" style="text-align:center; white-space:nowrap;">
             <input type="number" min="0" class="score-input" placeholder="-" value="${m.scoreA !== null ? m.scoreA : ""}" onchange="updateMatchScore('${m.id}', 'scoreA', this.value)" />
-            <span style="font-weight:900; margin:0 4px;">:</span>
+            <span style="font-weight:900; font-size:1.3rem; margin:0 6px;">:</span>
             <input type="number" min="0" class="score-input" placeholder="-" value="${m.scoreB !== null ? m.scoreB : ""}" onchange="updateMatchScore('${m.id}', 'scoreB', this.value)" />
           </td>
-          <td>${selectB}</td>
-          <td><input type="text" placeholder="Arbitre..." value="${m.referee || ""}" style="width:125px;" onchange="updateMatchField('${m.id}', 'referee', this.value)" /></td>
+          <td class="admin-match-cell-teamb">
+            <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; margin-bottom:2px;">Équipe B :</div>
+            ${selectB}
+          </td>
+          <td class="admin-match-cell-referee">
+            <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; margin-bottom:2px;">🦺 Arbitre :</div>
+            <input type="text" placeholder="Nom de l'arbitre..." value="${m.referee || ""}" style="width:100%;" onchange="updateMatchField('${m.id}', 'referee', this.value)" />
+          </td>
         </tr>
       `;
     }
@@ -1273,6 +1435,56 @@
       exportSportScheduleToExcel(sport);
     }
 
+    // Gestion du Flash Info & Alerte Plein Écran
+    function handleToggleFlashInfo() {
+      const state = loadState();
+      const currentActive = Boolean(state.flashInfo && state.flashInfo.active);
+      const textInput = document.getElementById("admin-flash-text");
+      const text = textInput ? textInput.value.trim() : "";
+      const levelSelect = document.getElementById("admin-flash-level");
+      const level = levelSelect ? levelSelect.value : "urgent";
+
+      if (!currentActive) {
+        if (!text) {
+          alert("Veuillez saisir un message pour le Flash Info avant de l'activer.");
+          return;
+        }
+        setFlashInfo(true, text, level);
+      } else {
+        setFlashInfo(false, text, level);
+      }
+      renderDashboard();
+    }
+
+    function handleTestChime() {
+      playAlertChime();
+    }
+
+    // Gestion du Décalage Horaire Global par Sport & Terrain
+    function handleShiftSchedule(sportId, deltaMinutes) {
+      const pitchFilterEl = document.getElementById("shift-pitch-filter");
+      const pitchFilter = pitchFilterEl ? pitchFilterEl.value : "ALL";
+
+      const res = shiftSportSchedule(sportId, deltaMinutes, pitchFilter);
+      if (res.success) {
+        const sign = deltaMinutes > 0 ? "+" : "";
+        alert(`Planning mis à jour : ${res.count} match(s) décalé(s) de ${sign}${deltaMinutes} minute(s).`);
+        renderSportDetail();
+      } else {
+        alert(res.message || "Impossible de décaler le planning.");
+      }
+    }
+
+    function handleShiftCustom(sportId) {
+      const customInput = document.getElementById("shift-custom-mins");
+      const val = customInput ? parseInt(customInput.value, 10) : NaN;
+      if (isNaN(val) || val === 0) {
+        alert("Veuillez saisir un nombre de minutes valide (ex: 5, 10, -5).");
+        return;
+      }
+      handleShiftSchedule(sportId, val);
+    }
+
     function confirmGlobalReset() {
       if (confirm("⚠️ Attention : Voulez-vous vraiment réinitialiser TOUS les sports, les plannings et les scores à zéro ?")) {
         resetAllTournament();
@@ -1281,11 +1493,147 @@
       }
     }
 
+    function updateTunnelUI(info) {
+      const chip = document.getElementById("admin-4g-chip");
+      const text = document.getElementById("admin-4g-text");
+      const link = document.getElementById("admin-4g-link");
+      const badge = document.getElementById("admin-4g-badge");
+      const badgeText = document.getElementById("admin-4g-badge-text");
+      const display = document.getElementById("admin-4g-url-display");
+      const openBtn = document.getElementById("admin-4g-open-btn");
+
+      const isPublic = Boolean(info && (info.publicUrl || (info.tunnelActive && info.mobileUrl && info.mobileUrl.startsWith("https://"))));
+      const effectiveUrl = (info && info.mobileUrl) ? info.mobileUrl : (info && info.publicUrl ? info.publicUrl : "http://localhost:8080/index.html");
+
+      if (chip && text) {
+        chip.className = "tunnel-status-chip " + (isPublic ? "online" : "offline");
+        text.textContent = isPublic ? "4G : En ligne" : "4G : Réseau Local";
+      }
+      if (link) {
+        link.href = effectiveUrl;
+        link.style.display = isPublic ? "inline" : "none";
+      }
+      if (badge && badgeText) {
+        badge.className = "tunnel-status-chip " + (isPublic ? "online" : "offline");
+        badgeText.textContent = isPublic ? "4G Actif (Cloudflare)" : "Mode Réseau Local";
+      }
+      if (display) {
+        display.textContent = effectiveUrl;
+      }
+      if (openBtn) {
+        openBtn.href = effectiveUrl;
+        openBtn.style.display = isPublic ? "inline-flex" : "none";
+      }
+    }
+
+    function refreshTunnelStatus() {
+      if (window.location.protocol.startsWith("http")) {
+        fetch("/api/info")
+          .then(res => res.json())
+          .then(info => updateTunnelUI(info))
+          .catch(() => {});
+      }
+    }
+
+    function copyMobileUrl() {
+      const display = document.getElementById("admin-4g-url-display");
+      if (display && display.textContent) {
+        const text = display.textContent.trim();
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => {
+            alert("URL mobile copiée dans le presse-papier !");
+          }).catch(() => {
+            prompt("Copiez l'URL :", text);
+          });
+        } else {
+          prompt("Copiez l'URL :", text);
+        }
+      }
+    }
+
+    function handleSetPublicUrl() {
+      const input = document.getElementById("admin-custom-url-input");
+      if (!input) return;
+      const url = input.value.trim();
+      fetch("/api/public-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ publicUrl: url })
+      })
+      .then(res => res.json())
+      .then(data => {
+        updateTunnelUI(data);
+        input.value = "";
+      })
+      .catch(err => {
+        alert("Erreur mise à jour URL : " + err.message);
+      });
+    }
+
+    // ========================================================================
+    // MARQUEUR DE SCORE EN DIRECT & CHRONOMÈTRE ARBITRE
+    // ========================================================================
+    function renderLiveScoreSection() {
+      const state = loadState();
+      const live = state.liveScore || {};
+      const projBtn = document.getElementById("live-proj-btn");
+
+      // Bouton projection
+      if (projBtn) {
+        if (live.active) {
+          projBtn.className = "btn btn-danger";
+          projBtn.innerHTML = "🔴 Masquer du Vidéoprojecteur";
+        } else {
+          projBtn.className = "btn btn-warning";
+          projBtn.innerHTML = "📺 Projeter Plein Écran (Live)";
+        }
+      }
+    }
+
+    function toggleLiveScoreProjection() {
+      const state = loadState();
+      if (!state.liveScore) state.liveScore = {};
+      state.liveScore.active = !state.liveScore.active;
+      state.liveScore.updatedAt = Date.now();
+      saveState(state);
+      renderLiveScoreSection();
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
       checkAuth();
       initTheme();
       startRealtimeClock("admin-clock");
       renderDashboard();
+      renderLiveScoreSection();
+      refreshTunnelStatus();
+
+      // Écoute de l'événement TUNNEL_UPDATE diffusé via SSE
+      window.addEventListener("tip:tunnel_update", (e) => {
+        if (e.detail) {
+          updateTunnelUI(e.detail);
+        }
+      });
+
+      // Synchronisation initiale : si le serveur est actif, pousser le localStorage
+      // vers le serveur pour que les mobiles en 4G reçoivent l'état réel.
+      if (window.location.protocol.startsWith("http")) {
+        const localState = loadState();
+        if (localState && localState.sports && localState.sports.length > 0) {
+          fetch("/api/state", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(localState)
+          }).then(() => {
+            console.log("✅ État local synchronisé avec le serveur TIP.");
+          }).catch(() => {});
+        }
+      }
+
+      // Synchronisation temps réel avec le serveur local (SSE)
+      initServerSync(() => {
+        if (currentSportId) renderSportDetail();
+        else renderDashboard();
+      });
 
       window.addEventListener("storage", (e) => {
         if (e.key === STORAGE_KEY) {

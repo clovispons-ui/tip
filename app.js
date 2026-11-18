@@ -305,6 +305,49 @@ function createInitialState() {
     lastUpdated: new Date().toISOString(),
     tournamentTitle: "TIP",
     pompomMode: false, // Mode Show POM-POM / Pause Repas (13h15)
+    flashInfo: {
+      active: false,
+      message: "",
+      level: "urgent", // "info", "urgent", "call"
+      timestamp: null
+    },
+    liveScore: {
+      active: false,
+      title: "Match 1",
+      teamAName: "Équipe A",
+      teamAColor: "#ef4444",
+      scoreA: 0,
+      teamBName: "Équipe B",
+      teamBColor: "#2563eb",
+      scoreB: 0,
+      timerMinutes: 10,
+      timerSeconds: 0,
+      timerRunning: false,
+      timerEndsAt: null,
+      timerRemainingOnPause: 600,
+      updatedAt: Date.now()
+    },
+    liveMatches: {
+      match_1: {
+        id: "match_1",
+        active: false,
+        title: "FINALE FOOTBALL",
+        teamAName: "Matméca",
+        teamAColor: "#ef4444",
+        teamAFiliereId: "matmeca",
+        scoreA: 0,
+        teamBName: "Elec",
+        teamBColor: "#2563eb",
+        teamBFiliereId: "elec",
+        scoreB: 0,
+        timerMinutes: 10,
+        timerSeconds: 0,
+        timerRunning: false,
+        timerEndsAt: null,
+        timerRemainingOnPause: 600,
+        updatedAt: Date.now()
+      }
+    },
     sports: sports
   };
 }
@@ -315,7 +358,9 @@ function loadState() {
     let state;
     if (!raw) {
       state = createInitialState();
-      saveState(state);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {}
       return state;
     }
     state = JSON.parse(raw);
@@ -329,6 +374,62 @@ function loadState() {
 
     if (state.tournamentTitle !== "TIP") {
       state.tournamentTitle = "TIP";
+      needsSave = true;
+    }
+
+    if (!state.flashInfo) {
+      state.flashInfo = {
+        active: false,
+        message: "",
+        level: "urgent",
+        timestamp: null
+      };
+      needsSave = true;
+    }
+
+    if (!state.liveScore) {
+      state.liveScore = {
+        active: false,
+        title: "Match 1",
+        teamAName: "Équipe A",
+        teamAColor: "#ef4444",
+        scoreA: 0,
+        teamBName: "Équipe B",
+        teamBColor: "#2563eb",
+        scoreB: 0,
+        timerMinutes: 10,
+        timerSeconds: 0,
+        timerRunning: false,
+        timerEndsAt: null,
+        timerRemainingOnPause: 600,
+        updatedAt: Date.now()
+      };
+      needsSave = true;
+    }
+
+    if (!state.liveMatches || typeof state.liveMatches !== "object") {
+      state.liveMatches = {};
+      if (state.liveScore) {
+        state.liveMatches.match_1 = {
+          id: "match_1",
+          active: Boolean(state.liveScore.active),
+          title: state.liveScore.title || "FINALE FOOTBALL",
+          teamAName: state.liveScore.teamAName || "Matméca",
+          teamAColor: state.liveScore.teamAColor || "#ef4444",
+          teamAFiliereId: state.liveScore.teamAFiliereId || "matmeca",
+          scoreA: state.liveScore.scoreA || 0,
+          teamBName: state.liveScore.teamBName || "Elec",
+          teamBColor: state.liveScore.teamBColor || "#2563eb",
+          teamBFiliereId: state.liveScore.teamBFiliereId || "elec",
+          scoreB: state.liveScore.scoreB || 0,
+          timerMinutes: state.liveScore.timerMinutes !== undefined ? state.liveScore.timerMinutes : 10,
+          timerSeconds: state.liveScore.timerSeconds !== undefined ? state.liveScore.timerSeconds : 0,
+          timerRunning: Boolean(state.liveScore.timerRunning),
+          timerEndsAt: state.liveScore.timerEndsAt || null,
+          timerRemainingOnPause: state.liveScore.timerRemainingOnPause !== undefined ? state.liveScore.timerRemainingOnPause : 600,
+          updatedAt: Date.now()
+        };
+      }
       needsSave = true;
     }
 
@@ -448,7 +549,9 @@ function loadState() {
     }
 
     if (needsSave) {
-      saveState(state);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {}
     }
 
     return state;
@@ -458,9 +561,54 @@ function loadState() {
   }
 }
 
+let saveStateDebounceTimer = null;
+let pendingStateToSave = null;
+let isSavingToServer = false;
+
 function saveState(state) {
   state.lastUpdated = new Date().toISOString();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.error("Erreur saveState localStorage:", e);
+  }
+
+  // Si on est dans un environnement sans HTTP (ex: Node test ou file://), s'arrêter là
+  if (typeof fetch !== "function" || typeof window === "undefined" || !window.location.protocol.startsWith("http")) {
+    return;
+  }
+
+  // Débouncage & mise en file d'attente pour éviter les requêtes concurrentes lors des clics rapides (+1 / -1)
+  pendingStateToSave = state;
+  if (saveStateDebounceTimer) {
+    clearTimeout(saveStateDebounceTimer);
+  }
+
+  saveStateDebounceTimer = setTimeout(() => {
+    executeServerSave();
+  }, 120);
+}
+
+function executeServerSave() {
+  if (isSavingToServer || !pendingStateToSave) return;
+  const stateToSend = pendingStateToSave;
+  pendingStateToSave = null;
+  isSavingToServer = true;
+
+  fetch("/api/state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(stateToSend)
+  })
+  .then(() => {})
+  .catch(() => {})
+  .finally(() => {
+    isSavingToServer = false;
+    // Si d'autres modifications ont eu lieu pendant la requête, envoyer la version la plus fraîche
+    if (pendingStateToSave) {
+      setTimeout(executeServerSave, 50);
+    }
+  });
 }
 
 function resetAllTournament() {
@@ -477,8 +625,10 @@ function getFiliereById(filiereId) {
 }
 
 function addMinutesToTime(timeStr, minsToAdd) {
+  if (!timeStr || !timeStr.includes(":")) return timeStr || "00:00";
   const [hh, mm] = timeStr.split(":").map(Number);
-  const total = hh * 60 + mm + minsToAdd;
+  let total = hh * 60 + mm + minsToAdd;
+  while (total < 0) total += 24 * 60;
   const newH = Math.floor(total / 60) % 24;
   const newM = total % 60;
   return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
@@ -491,6 +641,281 @@ function shuffleArray(arr) {
     [copy[i], copy[j]] = [copy[j], copy[i]];
   }
   return copy;
+}
+
+// ============================================================================
+// DÉCALAGE HORAIRE GLOBAL PAR SPORT & PAR TERRAIN
+// ============================================================================
+function shiftSportSchedule(sportId, deltaMinutes, pitchFilter = "ALL") {
+  const state = loadState();
+  const sport = state.sports[sportId];
+  if (!sport || !Array.isArray(sport.matches) || sport.matches.length === 0) {
+    return { success: false, message: "Aucun match généré pour ce sport." };
+  }
+
+  let count = 0;
+  sport.matches.forEach(m => {
+    // Ne décaler que les matchs non terminés (sans score renseigné)
+    const isFinished = (m.scoreA !== null && m.scoreB !== null && m.scoreA !== "" && m.scoreB !== "") ||
+                       (m.raceResults && Object.keys(m.raceResults).length > 0);
+    if (isFinished) return;
+
+    if (pitchFilter && pitchFilter !== "ALL" && m.pitch !== pitchFilter) return;
+
+    m.time = addMinutesToTime(m.time, deltaMinutes);
+    count++;
+  });
+
+  saveState(state);
+  return { success: true, count, delta: deltaMinutes };
+}
+
+// ============================================================================
+// GESTION DU FLASH INFO & DES ALERTES PLEIN ÉCRAN
+// ============================================================================
+function setFlashInfo(active, message = "", level = "urgent") {
+  const state = loadState();
+  state.flashInfo = {
+    active: Boolean(active),
+    message: String(message || "").trim(),
+    level: level || "urgent",
+    timestamp: new Date().toISOString()
+  };
+  saveState(state);
+
+  // Émission directe au serveur si disponible
+  if (typeof fetch === "function" && typeof window !== "undefined" && window.location.protocol.startsWith("http")) {
+    fetch("/api/flash", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(state.flashInfo)
+    }).catch(() => {});
+  }
+
+  return state.flashInfo;
+}
+
+let sharedAudioContext = null;
+
+function getSharedAudioContext() {
+  if (typeof window === "undefined") return null;
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return null;
+  if (!sharedAudioContext) {
+    sharedAudioContext = new AudioCtx();
+  }
+  if (sharedAudioContext.state === "suspended") {
+    sharedAudioContext.resume().catch(() => {});
+  }
+  return sharedAudioContext;
+}
+
+// Déverrouillage automatique du son et des vibrations au premier contact tactile ou clic
+if (typeof window !== "undefined") {
+  const unlockAudio = () => {
+    const ctx = getSharedAudioContext();
+    if (ctx && ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+    // Demander la permission de notification discrètement si disponible
+    if ("Notification" in window && Notification.permission === "default") {
+      try { Notification.requestPermission(); } catch (e) {}
+    }
+  };
+  window.addEventListener("touchstart", unlockAudio, { once: true, passive: true });
+  window.addEventListener("click", unlockAudio, { once: true, passive: true });
+}
+
+// Signal sonore d'alerte haute clarté synthétisé via Web Audio API (0 fichier externe)
+function playAlertChime() {
+  try {
+    const ctx = getSharedAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+    const now = ctx.currentTime;
+
+    // Son d'annonce à 3 notes montantes percutantes (523Hz C5 -> 659Hz E5 -> 784Hz G5)
+    const tones = [
+      { freq: 523.25, time: now, dur: 0.18, gain: 0.5 },
+      { freq: 659.25, time: now + 0.18, dur: 0.18, gain: 0.55 },
+      { freq: 783.99, time: now + 0.36, dur: 0.45, gain: 0.6 }
+    ];
+
+    tones.forEach(t => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(t.freq, t.time);
+      gain.gain.setValueAtTime(0.01, t.time);
+      gain.gain.linearRampToValueAtTime(t.gain, t.time + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, t.time + t.dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t.time);
+      osc.stop(t.time + t.dur);
+    });
+  } catch (e) {
+    console.debug("AudioChime:", e);
+  }
+}
+
+// Alarme sonore puissante de fin de match / coup de sifflet électronique
+function playMatchEndBuzzer() {
+  try {
+    const ctx = getSharedAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+    const now = ctx.currentTime;
+
+    // 3 bips puissants style buzzer de gymnase
+    [0, 0.35, 0.70].forEach(delay => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(440, now + delay);
+      osc.frequency.exponentialRampToValueAtTime(320, now + delay + 0.28);
+      gain.gain.setValueAtTime(0.6, now + delay);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + delay + 0.28);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + delay);
+      osc.stop(now + delay + 0.28);
+    });
+
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      try { navigator.vibrate([300, 100, 300, 100, 600]); } catch (e) {}
+    }
+  } catch (e) {
+    console.debug("Buzzer:", e);
+  }
+}
+
+// Notification push et vibration sur smartphone (pattern fort 500ms - 200ms - 500ms)
+function triggerMobileAlert(title, body) {
+  playAlertChime();
+  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+    try {
+      navigator.vibrate([500, 200, 500, 200, 500]);
+    } catch (e) {}
+  }
+  if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+    try {
+      new Notification(title, {
+        body: body,
+        icon: "favicon.ico",
+        vibrate: [500, 200, 500]
+      });
+    } catch (e) {}
+  }
+}
+
+let lastSeenFlashTimestamp = null;
+
+// Synchronisation temps réel avec le serveur local (SSE) + fallback polling
+function initServerSync(onUpdateCallback) {
+  if (typeof window !== "undefined" && window.location.protocol.startsWith("http")) {
+    let es = null;
+
+    function connectSSE() {
+      try {
+        es = new EventSource("/api/events");
+        es.onmessage = function(e) {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.type === "STATE_UPDATE" && data.state) {
+              const prevState = loadState();
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(data.state));
+              // Détection alerte flash via STATE_UPDATE
+              if (data.state.flashInfo && data.state.flashInfo.active) {
+                const prevTs = (prevState && prevState.flashInfo) ? prevState.flashInfo.timestamp : null;
+                if (data.state.flashInfo.timestamp && data.state.flashInfo.timestamp !== prevTs && data.state.flashInfo.timestamp !== lastSeenFlashTimestamp) {
+                  lastSeenFlashTimestamp = data.state.flashInfo.timestamp;
+                  triggerMobileAlert("📢 Flash Info TIP", data.state.flashInfo.message);
+                }
+              }
+              if (typeof onUpdateCallback === "function") onUpdateCallback(data.state);
+            } else if (data.type === "FLASH_INFO" && data.flashInfo) {
+              const state = loadState();
+              state.flashInfo = data.flashInfo;
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+              if (data.flashInfo.active && data.flashInfo.timestamp !== lastSeenFlashTimestamp) {
+                lastSeenFlashTimestamp = data.flashInfo.timestamp;
+                triggerMobileAlert("📢 Flash Info TIP", data.flashInfo.message);
+              }
+              if (typeof onUpdateCallback === "function") onUpdateCallback(state);
+            } else if (data.type === "TUNNEL_UPDATE" || (data.type === "CONNECTED" && (data.publicUrl || data.mobileUrl))) {
+              const mobileUrl = data.mobileUrl || data.publicUrl;
+              if (mobileUrl && typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("tip:tunnel_update", {
+                  detail: {
+                    mobileUrl: mobileUrl,
+                    publicUrl: data.publicUrl || null,
+                    tunnelActive: Boolean(data.publicUrl)
+                  }
+                }));
+              }
+            }
+          } catch (err) {
+            console.debug("SSE Parse Error:", err);
+          }
+        };
+
+        es.onerror = function() {
+          // Si SSE est coupé par un proxy mobile 4G ou veille de téléphone, reconnection automatique
+          if (es) {
+            es.close();
+            es = null;
+          }
+          setTimeout(connectSSE, 3000);
+        };
+      } catch (e) {
+        console.debug("SSE non supporté:", e);
+      }
+    }
+
+    connectSSE();
+
+    // Fallback polling périodique (toutes les 4 secondes) pour garantir les alertes sur smartphone
+    // même si un navigateur mobile ou Cloudflare met en pause la connexion EventSource
+    setInterval(() => {
+      fetch("/api/state")
+        .then(res => res.ok ? res.json() : null)
+        .then(serverState => {
+          if (!serverState || !serverState.sports) return;
+          const localRaw = localStorage.getItem(STORAGE_KEY);
+          const localState = localRaw ? JSON.parse(localRaw) : null;
+
+          // Détecter si l'état ou le flashInfo a changé
+          const hasFlashChange = Boolean(
+            serverState.flashInfo &&
+            serverState.flashInfo.active &&
+            (!localState || !localState.flashInfo || localState.flashInfo.timestamp !== serverState.flashInfo.timestamp)
+          );
+
+          const hasStateChange = Boolean(
+            !localState ||
+            serverState.lastUpdated !== localState.lastUpdated ||
+            hasFlashChange
+          );
+
+          if (hasStateChange) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(serverState));
+            if (hasFlashChange && serverState.flashInfo.timestamp !== lastSeenFlashTimestamp) {
+              lastSeenFlashTimestamp = serverState.flashInfo.timestamp;
+              triggerMobileAlert("📢 Flash Info TIP", serverState.flashInfo.message);
+            }
+            if (typeof onUpdateCallback === "function") {
+              onUpdateCallback(serverState);
+            }
+          }
+        })
+        .catch(() => {});
+    }, 4000);
+  }
 }
 
 // ============================================================================
@@ -1519,64 +1944,76 @@ function computeGlobalFiliereStandings(state) {
 // ============================================================================
 function getNextMatchesForProjection(state, selectedSportFilter) {
   const result = [];
+  const isSingleSport = selectedSportFilter && selectedSportFilter !== "ALL";
 
-  const sportsToScan = selectedSportFilter && selectedSportFilter !== "ALL"
+  const sportsToScan = isSingleSport
     ? [state.sports[selectedSportFilter]].filter(Boolean)
     : Object.values(state.sports);
 
   sportsToScan.forEach(sport => {
     if (!sport.initialized) return;
 
-    // Déterminer la liste des terrains utilisés par ce sport
-    const pitches = sport.pitchNames && sport.pitchNames.length > 0
-      ? sport.pitchNames
-      : Array.from(new Set(sport.matches.map(m => m.pitch)));
-
-    pitches.forEach(pitchName => {
-      // Filtrer les matchs sur ce terrain
-      const pitchMatches = sport.matches.filter(m => m.pitch === pitchName);
-
-      // Matchs non terminés ET avec les 2 équipes renseignées
-      const upcomingWithBothTeams = pitchMatches.filter(m => {
-        if (m.isRace) {
-          const filledLanes = (m.raceTeamIds || []).filter(Boolean);
-          const hasResults = Object.keys(m.raceResults || {}).length > 0;
-          return !hasResults && filledLanes.length >= 2;
-        }
-
-        const isFinished = (m.scoreA !== null && m.scoreB !== null && m.scoreA !== "" && m.scoreB !== "");
-        if (isFinished) return false;
-
-        // RÈGLE DEMANDÉE : Tant qu'il n'y a pas les 2 équipes, NE PAS AFFICHER sur le projeté !
-        const hasTeamA = Boolean(m.teamAId);
-        const hasTeamB = Boolean(m.teamBId);
-        return hasTeamA && hasTeamB;
-      });
-
-      // Trier chronologiquement par heure puis par ordre
-      upcomingWithBothTeams.sort((a, b) => {
-        if (a.time !== b.time) return a.time.localeCompare(b.time);
-        return a.order - b.order;
-      });
-
-      // Prendre les 2 prochains matchs sur ce terrain
-      const nextTwo = upcomingWithBothTeams.slice(0, 2);
-      nextTwo.forEach((m, slotIndex) => {
+    if (isSingleSport) {
+      // Si un sport spécifique est sélectionné : afficher TOUS les matchs du sport
+      sport.matches.forEach(m => {
         result.push({
           ...m,
           sportId: sport.id,
           sportName: sport.name,
           sportIcon: sport.icon,
-          pitchName: pitchName,
-          slotLabel: slotIndex === 0 ? "Prochain match" : "Match suivant",
+          pitchName: m.pitch,
+          slotLabel: m.label,
           sportTheme: getSportTheme(sport.id),
           sportRef: sport
         });
       });
-    });
+    } else {
+      // Vue globale "Tous les sports" : 2 prochains matchs confirmés par terrain
+      const pitches = sport.pitchNames && sport.pitchNames.length > 0
+        ? sport.pitchNames
+        : Array.from(new Set(sport.matches.map(m => m.pitch)));
+
+      pitches.forEach(pitchName => {
+        const pitchMatches = sport.matches.filter(m => m.pitch === pitchName);
+
+        const upcomingWithBothTeams = pitchMatches.filter(m => {
+          if (m.isRace) {
+            const filledLanes = (m.raceTeamIds || []).filter(Boolean);
+            const hasResults = Object.keys(m.raceResults || {}).length > 0;
+            return !hasResults && filledLanes.length >= 2;
+          }
+
+          const isFinished = (m.scoreA !== null && m.scoreB !== null && m.scoreA !== "" && m.scoreB !== "");
+          if (isFinished) return false;
+
+          const hasTeamA = Boolean(m.teamAId);
+          const hasTeamB = Boolean(m.teamBId);
+          return hasTeamA && hasTeamB;
+        });
+
+        upcomingWithBothTeams.sort((a, b) => {
+          if (a.time !== b.time) return a.time.localeCompare(b.time);
+          return a.order - b.order;
+        });
+
+        const nextTwo = upcomingWithBothTeams.slice(0, 2);
+        nextTwo.forEach((m, slotIndex) => {
+          result.push({
+            ...m,
+            sportId: sport.id,
+            sportName: sport.name,
+            sportIcon: sport.icon,
+            pitchName: pitchName,
+            slotLabel: slotIndex === 0 ? "Prochain match" : "Match suivant",
+            sportTheme: getSportTheme(sport.id),
+            sportRef: sport
+          });
+        });
+      });
+    }
   });
 
-  // Trier globalement la liste pour un affichage cohérent
+  // Trier globalement la liste chronologiquement par heure puis ordre
   result.sort((a, b) => {
     if (a.time !== b.time) return a.time.localeCompare(b.time);
     return a.order - b.order;
@@ -1594,40 +2031,78 @@ function exportSportScheduleToExcel(sport) {
     return;
   }
 
-  const getTeamLabel = (tid, placeholder) => {
-    if (!tid) return placeholder || "À déterminer";
+  const theme = getSportTheme(sport.id);
+
+  const getTeamInfo = (tid, placeholder) => {
+    if (!tid) return { name: placeholder || "À déterminer", hex: "#64748b", textHex: "#ffffff", filiereName: "" };
     const t = sport.teams.find(x => x.id === tid);
-    return t ? t.name : (placeholder || "À déterminer");
+    if (!t) return { name: placeholder || "À déterminer", hex: "#64748b", textHex: "#ffffff", filiereName: "" };
+    const f = getFiliereById(t.filiereId);
+    return { name: t.name, hex: f.hex, textHex: f.textHex || "#000000", filiereName: f.name };
   };
 
-  let rowsHtml = "";
-  sport.matches.forEach(m => {
-    let confrontation = "";
-    let scoreStr = "";
+  const buildMatchRow = (m) => {
     if (m.isRace) {
-      const runners = (m.raceTeamIds || []).map((tid, idx) => `Couloir ${idx + 1}: ${getTeamLabel(tid, "Qualifié")}`).join(" | ");
-      confrontation = runners;
-      scoreStr = Object.entries(m.raceResults || {}).map(([tid, r]) => `${getTeamLabel(tid)}: ${r}`).join(", ");
-    } else {
-      const nameA = getTeamLabel(m.teamAId, m.placeholderA);
-      const nameB = getTeamLabel(m.teamBId, m.placeholderB);
-      confrontation = `${nameA} vs ${nameB}`;
-      scoreStr = (m.scoreA !== null && m.scoreB !== null && m.scoreA !== "" && m.scoreB !== "") ? `${m.scoreA} - ${m.scoreB}` : "À jouer";
+      const runners = (m.raceTeamIds || []).map((tid, idx) => {
+        const info = getTeamInfo(tid, "Qualifié");
+        return `<span style="background:${info.hex}; color:${info.textHex}; padding:2px 6px; border-radius:4px; font-weight:bold;">C${idx + 1}: ${info.name}</span>`;
+      }).join(" &nbsp; ");
+
+      const resultStr = Object.entries(m.raceResults || {}).map(([tid, r]) => {
+        const info = getTeamInfo(tid);
+        return `${info.name}: ${r}`;
+      }).join(", ");
+
+      return `
+        <tr>
+          <td style="text-align:center; font-weight:bold; background:#f8fafc;">${m.order}</td>
+          <td style="text-align:center; font-weight:bold; background:#f1f5f9;">${m.time}</td>
+          <td style="background:#ffffff;">${m.pitch}</td>
+          <td style="background:#ffffff; font-weight:bold;">${m.phase} - ${m.label}</td>
+          <td colspan="5" style="background:#ffffff;">${runners}</td>
+          <td style="text-align:center; background:#f8fafc; font-weight:bold;">${resultStr || "À courir"}</td>
+          <td style="background:#ffffff;">${m.referee || "Chrono BDS"}</td>
+          <td style="background:#ffffff;"></td>
+        </tr>
+      `;
     }
 
-    rowsHtml += `
+    const teamA = getTeamInfo(m.teamAId, m.placeholderA);
+    const teamB = getTeamInfo(m.teamBId, m.placeholderB);
+
+    const scoreA = (m.scoreA !== null && m.scoreA !== undefined) ? m.scoreA : "";
+    const scoreB = (m.scoreB !== null && m.scoreB !== undefined) ? m.scoreB : "";
+
+    let winner = "";
+    if (scoreA !== "" && scoreB !== "") {
+      if (Number(scoreA) > Number(scoreB)) winner = teamA.name;
+      else if (Number(scoreB) > Number(scoreA)) winner = teamB.name;
+      else winner = "Match Nul";
+    }
+
+    return `
       <tr>
-        <td>${m.order}</td>
-        <td><b>${m.time}</b></td>
-        <td>${m.phase}</td>
-        <td>${m.label}</td>
-        <td>${m.pitch}</td>
-        <td>${confrontation}</td>
-        <td>${scoreStr}</td>
-        <td>${m.referee || "Non assigné"}</td>
+        <td style="text-align:center; font-weight:bold; background:#f8fafc;">${m.order}</td>
+        <td style="text-align:center; font-weight:bold; background:#f1f5f9; color:#0f172a;">${m.time}</td>
+        <td style="background:#ffffff;">${m.pitch}</td>
+        <td style="background:#ffffff; font-weight:600;">${m.label}</td>
+        <td style="background:${teamA.hex}; color:${teamA.textHex}; font-weight:bold; padding:6px 10px;">${teamA.name}</td>
+        <td style="text-align:center; font-weight:900; font-size:1.15em; background:#f8fafc; border:2px solid #94a3b8; width:55px;">${scoreA}</td>
+        <td style="text-align:center; font-weight:bold; color:#64748b; background:#f1f5f9;">VS</td>
+        <td style="text-align:center; font-weight:900; font-size:1.15em; background:#f8fafc; border:2px solid #94a3b8; width:55px;">${scoreB}</td>
+        <td style="background:${teamB.hex}; color:${teamB.textHex}; font-weight:bold; padding:6px 10px;">${teamB.name}</td>
+        <td style="background:#ffffff; font-style:italic;">${m.referee || "À désigner"}</td>
+        <td style="background:#ffffff; font-weight:bold; color:${theme.color};">${winner}</td>
+        <td style="background:#ffffff;"></td>
       </tr>
     `;
-  });
+  };
+
+  const poolMatches = sport.matches.filter(m => m.phase === "POULE" || !m.phase);
+  const knockoutMatches = sport.matches.filter(m => m.phase && m.phase !== "POULE");
+
+  const poolRowsHtml = poolMatches.map(buildMatchRow).join("");
+  const knockoutRowsHtml = knockoutMatches.map(buildMatchRow).join("");
 
   let teamsRowsHtml = "";
   sport.teams.filter(t => t.active).forEach(t => {
@@ -1635,10 +2110,10 @@ function exportSportScheduleToExcel(sport) {
     const pts = POINTS_SCALE[t.stageReached] || 0;
     teamsRowsHtml += `
       <tr>
-        <td>${t.name}</td>
-        <td>${f.name} (${f.colorName})</td>
-        <td>${t.stageReached || "POULE"}</td>
-        <td>${pts} pt(s)</td>
+        <td style="font-weight:bold; background:#ffffff;">${t.name}</td>
+        <td style="background:${f.hex}; color:${f.textHex || '#000000'}; font-weight:bold; text-align:center;">${f.name}</td>
+        <td style="text-align:center; background:#ffffff;">${STAGE_LABELS[t.stageReached] || t.stageReached || "Poule"}</td>
+        <td style="text-align:center; font-weight:900; background:#f1f5f9; color:${theme.color};">${pts} pt(s)</td>
       </tr>
     `;
   });
@@ -1648,40 +2123,82 @@ function exportSportScheduleToExcel(sport) {
     <head>
       <meta charset="UTF-8">
       <style>
-        table { border-collapse: collapse; margin-bottom: 25px; font-family: Arial, sans-serif; }
-        th { background-color: #1e293b; color: #ffffff; font-weight: bold; padding: 8px; border: 1px solid #334155; }
-        td { padding: 6px 10px; border: 1px solid #cbd5e1; }
+        body { font-family: 'Segoe UI', Calibri, Arial, sans-serif; background-color: #ffffff; color: #0f172a; }
+        table { border-collapse: collapse; margin-bottom: 28px; width: 100%; }
+        th { background-color: ${theme.color}; color: #ffffff; font-weight: bold; padding: 9px 8px; border: 1px solid #334155; font-size: 13px; text-transform: uppercase; }
+        td { padding: 7px 10px; border: 1px solid #cbd5e1; font-size: 12px; vertical-align: middle; }
+        h1 { color: ${theme.color}; font-size: 20px; margin-bottom: 4px; }
+        h2 { color: #0f172a; font-size: 16px; margin-top: 20px; margin-bottom: 8px; border-bottom: 2px solid ${theme.color}; padding-bottom: 4px; }
+        .rule-box { background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px 14px; margin-bottom: 20px; font-size: 12px; }
       </style>
     </head>
     <body>
-      <h2>Planning Officiel - ${sport.name} (${sport.startTime} - ${sport.endTime})</h2>
-      <p><i>Note organisation : ${sport.excelNote}</i></p>
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Heure</th>
-            <th>Phase</th>
-            <th>Match / Série</th>
-            <th>Terrain</th>
-            <th>Équipes / Confrontation</th>
-            <th>Score / Résultat</th>
-            <th>Arbitre</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rowsHtml}
-        </tbody>
-      </table>
+      <h1>🏆 TOURNOI INTER-PROMO (TIP) — PLANNING OFFICIEL : ${sport.name.toUpperCase()}</h1>
+      <div class="rule-box">
+        <b>Créneaux horaires :</b> ${sport.startTime} - ${sport.endTime} &nbsp;•&nbsp; 
+        <b>Durée des rencontres :</b> ${sport.matchDuration} min &nbsp;•&nbsp; 
+        <b>Barème officiel :</b> 8ème: 1 pt • Quart: 2 pts • Demi: 4 pts • Finale: 5 pts • Vainqueur: 7 pts (Poules: 3V - 2N - 1D)
+        <br/><i>Note terrain : ${sport.excelNote || "Respectez impérativement le temps de jeu pour libérer les terrains à 13h10."}</i>
+      </div>
 
-      <h3>Équipes Engagées & Points (${sport.name})</h3>
-      <table>
+      ${poolMatches.length > 0 ? `
+        <h2>PHASE 1 : MATCHS DE POULES</h2>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px;">#</th>
+              <th style="width:75px;">Heure</th>
+              <th style="width:140px;">Terrain</th>
+              <th style="width:130px;">Match</th>
+              <th>Équipe A</th>
+              <th style="width:60px;">Score A</th>
+              <th style="width:35px;">VS</th>
+              <th style="width:60px;">Score B</th>
+              <th>Équipe B</th>
+              <th style="width:140px;">Arbitre / Table</th>
+              <th style="width:130px;">Vainqueur</th>
+              <th style="width:130px;">Émargement</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${poolRowsHtml}
+          </tbody>
+        </table>
+      ` : ''}
+
+      ${knockoutMatches.length > 0 ? `
+        <h2>PHASE 2 : PHASES FINALES (QUARTS, DEMIS, FINALES)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:40px;">#</th>
+              <th style="width:75px;">Heure</th>
+              <th style="width:140px;">Terrain</th>
+              <th style="width:130px;">Tour</th>
+              <th>Équipe A</th>
+              <th style="width:60px;">Score A</th>
+              <th style="width:35px;">VS</th>
+              <th style="width:60px;">Score B</th>
+              <th>Équipe B</th>
+              <th style="width:140px;">Arbitre / Table</th>
+              <th style="width:130px;">Vainqueur</th>
+              <th style="width:130px;">Émargement</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${knockoutRowsHtml}
+          </tbody>
+        </table>
+      ` : ''}
+
+      <h2>ÉQUIPES ENGAGÉES & POINTS ACQUIS (${sport.name.toUpperCase()})</h2>
+      <table style="max-width: 750px;">
         <thead>
           <tr>
             <th>Équipe</th>
-            <th>Filière</th>
-            <th>Stade Atteint</th>
-            <th>Points Rapportés</th>
+            <th style="width:140px;">Filière</th>
+            <th style="width:200px;">Stade de Qualification</th>
+            <th style="width:140px;">Points au Classement</th>
           </tr>
         </thead>
         <tbody>
@@ -1745,4 +2262,16 @@ function startRealtimeClock(elementId) {
   };
   tick();
   setInterval(tick, 1000);
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    loadState,
+    saveState,
+    createInitialState,
+    resetAllTournament,
+    initServerSync,
+    FILIERES,
+    STORAGE_KEY
+  };
 }

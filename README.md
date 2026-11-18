@@ -118,5 +118,27 @@ Le mot de passe **n'est plus stocké en clair** dans le code source :
      - 🤾 Dodgeball : Violet Intense (`#7c3aed`).
    - Les matchs de phase finale non encore déterminés (sans les 2 équipes) ne sont pas affichés sur le vidéoprojecteur tant que les équipes ne sont pas qualifiées.
 
-7. **Pause Repas & Show POM-POM (13h15)** :
+7. **Pause Repas & Show POM-POM (13h30)** :
    - Un bouton dans l'accueil administrateur permet d'activer le mode Pause Repas / Show POM-POM : la zone de droite affiche une carte géante Jaune & Noir parfaitement centrée à l'écran, avec horaires et annonce du show, tout en gardant le classement général en gros à gauche.
+
+8. **Décalage Horaire Global en 1 Clic par Sport & Terrain** :
+   - Dans l'onglet de chaque sport, une barre d'action rapide permet de décaler tous les matchs à venir de `+5 min`, `+10 min`, `+15 min` (ou `-5 min`, `-10 min` ou durée sur-mesure).
+   - Possibilité d'appliquer le décalage à l'ensemble du sport ou uniquement à un terrain particulier (ex. COSEC en cas d'interruption sur ce terrain).
+   - Les matchs déjà joués avec score validé sont automatiquement préservés.
+
+9. **Flash Info & Alerte Plein Écran Vidéoprojecteur** :
+   - Depuis l'interface d'administration, saisissez un message d'urgence ou une annonce prioritaire et cliquez sur **"🚀 Activer & Projeter le Flash Info"**.
+   - Le message prend instantanément possession de 100% de l'écran du vidéoprojecteur (`index.html`) en très grand format centré, avec typographie sportive stadium ultra lisible à 30 mètres.
+   - Émission d'un carillon sonore d'alerte haute clarté synthétisé sans aucun fichier audio externe (Web Audio API) et vibration/notification sur les smartphones connectés.
+
+10. **Serveur Local Autonome & QR Code Mobile (Zéro Frais)** :
+    - Deux scripts serveurs autonomes zéro-dépendance sont fournis :
+      - **En Node.js :** `node server.js` (ou `node tip/server.js`)
+      - **En Python 3 :** `python3 server.py` (ou `python3 tip/server.py`)
+    - Le serveur démarre sur le port `8080`, détecte automatiquement l'adresse IP locale de la machine (ex: `http://192.168.1.X:8080`), et génère un QR Code vectoriel pur SVG dans le coin inférieur droit du vidéoprojecteur.
+    - Les capitaines et supporters connectés au même réseau (Wi-Fi ou hotspot local sans fil du PC de l'orga) flashent le QR Code avec leur appareil photo pour suivre en direct les matchs et recevoir les notifications d'alerte !
+
+11. **Export Excel (.xls) Stylisé & Pratique pour Saisie Manuelle** :
+    - Mise en page professionnelle aux couleurs officielles de chaque sport.
+    - Séparation claire en deux tableaux distincts : **Phase de Poules** et **Phases Finales**.
+    - Colonnes pré-calibrées avec cases de scores larges et contrastées (*Score A*, *Score B*, *Vainqueur*, *Arbitre*, *Émargement*), idéales à imprimer ou à remplir directement sur ordinateur.

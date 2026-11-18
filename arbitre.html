@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Marqueur de Score & Chrono Arbitre - TIP</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body {
+      background-color: var(--bg-main, #0f172a);
+      color: var(--text-main, #f8fafc);
+      margin: 0;
+      padding: 0.4rem;
+      font-family: var(--font-main, system-ui, -apple-system, sans-serif);
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .ref-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.4rem 0.6rem;
+      background: var(--bg-card, #1e293b);
+      border-radius: 12px;
+      margin-bottom: 0.5rem;
+      border: 1px solid var(--border-color, #334155);
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+    .ref-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .ref-header h1 {
+      font-size: 1.1rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-family: var(--font-athletic, sans-serif);
+      letter-spacing: 0.05em;
+    }
+    .ref-match-selector {
+      font-size: 0.82rem;
+      font-weight: 800;
+      padding: 0.3rem 0.5rem;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #38bdf8;
+      border: 1px solid #38bdf8;
+      cursor: pointer;
+    }
+    .ref-card {
+      background: var(--bg-card, #1e293b);
+      border: 1px solid var(--border-color, #334155);
+      border-radius: 14px;
+      padding: 0.5rem 0.6rem;
+      margin-bottom: 0.5rem;
+    }
+    .ref-match-title-row {
+      display: flex;
+      gap: 0.4rem;
+      margin-bottom: 0.45rem;
+    }
+    .ref-match-title-row input {
+      width: 100%;
+      font-size: 0.95rem;
+      font-weight: 800;
+      padding: 0.45rem 0.65rem;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border-color, #475569);
+      color: #fff;
+    }
+    .ref-timer-section {
+      text-align: center;
+      padding: 0.5rem 0.4rem;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 12px;
+      margin-bottom: 0.6rem;
+      border: 1px solid var(--border-color, #334155);
+    }
+    .ref-timer-big {
+      font-family: var(--font-mono, monospace);
+      font-size: clamp(2.8rem, 11vw, 4.2rem);
+      font-weight: 900;
+      color: #facc15;
+      line-height: 1;
+      text-shadow: 0 0 20px rgba(250, 204, 21, 0.4);
+      letter-spacing: 0.05em;
+      margin: 0.15rem 0 0.35rem 0;
+    }
+    .ref-timer-controls {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 0.45rem;
+    }
+    .ref-timer-btn {
+      padding: 0.5rem 1.2rem;
+      font-size: 1rem;
+      font-weight: 800;
+      border-radius: 10px;
+      cursor: pointer;
+      border: none;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+    .ref-timer-btn:active {
+      transform: scale(0.96);
+    }
+    /* Défilement / molette Minutes et Secondes compact */
+    .ref-time-picker-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+    .ref-wheel-select {
+      font-family: var(--font-mono, monospace);
+      font-size: 1.05rem;
+      font-weight: 800;
+      padding: 0.25rem 0.45rem;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #f8fafc;
+      border: 1px solid #475569;
+      cursor: pointer;
+      text-align: center;
+    }
+    .ref-teams-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+    .ref-team-box {
+      border-radius: 12px;
+      padding: 0.6rem 0.4rem;
+      background: rgba(0, 0, 0, 0.25);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border-top: 6px solid #ef4444;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      border-left: 1px solid rgba(255,255,255,0.08);
+      border-right: 1px solid rgba(255,255,255,0.08);
+    }
+    .ref-filiere-select {
+      width: 100%;
+      font-size: 0.92rem;
+      font-weight: 800;
+      padding: 0.38rem 0.25rem;
+      border-radius: 8px;
+      background: #1e293b;
+      color: #fff;
+      border: 2px solid transparent;
+      text-align: center;
+      margin-bottom: 0.35rem;
+      cursor: pointer;
+    }
+    .ref-team-name-custom {
+      width: 100%;
+      font-size: 0.82rem;
+      font-weight: 700;
+      padding: 0.25rem 0.35rem;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #fff;
+      text-align: center;
+      margin-bottom: 0.4rem;
+    }
+    .ref-score-big {
+      font-family: var(--font-athletic, sans-serif);
+      font-size: clamp(3.4rem, 14vw, 5rem);
+      font-weight: 900;
+      line-height: 1;
+      margin: 0.1rem 0 0.5rem 0;
+      text-shadow: 0 4px 15px rgba(0,0,0,0.6);
+    }
+    .ref-score-actions {
+      display: flex;
+      gap: 0.4rem;
+      width: 100%;
+    }
+    .btn-score-big {
+      flex: 1;
+      font-size: 1.5rem;
+      font-weight: 900;
+      padding: 0.6rem 0;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      line-height: 1;
+      touch-action: manipulation;
+    }
+    .btn-score-big:active {
+      transform: scale(0.95);
+    }
+    .btn-plus {
+      background: #22c55e;
+      color: #0f172a;
+    }
+    .btn-minus {
+      background: #ef4444;
+      color: #ffffff;
+    }
+    .ref-actions-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 0.6rem;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+    .ref-footer-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.4rem 0.6rem;
+      font-size: 0.8rem;
+      color: var(--text-muted, #94a3b8);
+      margin-top: 0.3rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- EN-TÊTE ARBITRE AVEC CHOIX DU MATCH & BOUTON PROJECTION -->
+  <header class="ref-header">
+    <div class="ref-header-left">
+      <h1><span>⏱️</span> ARBITRE</h1>
+      <select id="ref-match-id-select" class="ref-match-selector" onchange="switchCurrentMatch(this.value)">
+        <!-- Options injectées en JS : Match 1, Match 2, Match 3, Match 4 -->
+      </select>
+    </div>
+    <div class="ref-proj-toggle">
+      <button id="ref-proj-btn" class="btn btn-sm" onclick="toggleProjection()" style="font-weight: 800; font-size: 0.82rem; padding: 0.4rem 0.75rem;">
+        📺 Projeter Plein Écran
+      </button>
+    </div>
+  </header>
+
+  <!-- CONTENEUR DU MATCH ACTIF -->
+  <main>
+    <div class="ref-card">
+      <div class="ref-match-title-row">
+        <input type="text" id="ref-match-title" value="FINALE FOOTBALL" placeholder="Titre (ex: FINALE FOOTBALL, 1/2 VOLLEY, MATCH 2...)" onchange="onMetaChange()" />
+      </div>
+
+      <!-- CHRONOMÈTRE ARBITRE AVEC SÉLECTION MINUTES/SECONDES PAR DÉFILEMENT COMPACT -->
+      <div class="ref-timer-section">
+        <div id="ref-timer-display" class="ref-timer-big">10:00</div>
+        
+        <div class="ref-timer-controls">
+          <button id="ref-timer-toggle-btn" class="ref-timer-btn btn-primary" onclick="toggleTimer()">
+            ▶ Démarrer
+          </button>
+          <button class="ref-timer-btn" style="background: #475569; color: #fff;" onclick="resetTimer()">
+            ↺ Reset
+          </button>
+        </div>
+
+        <!-- Réglage compact par liste déroulante minutes et secondes -->
+        <div class="ref-time-picker-row">
+          <span>Durée :</span>
+          <select id="ref-wheel-min" class="ref-wheel-select" onchange="onWheelTimeChange()">
+            <!-- Options 00 à 60 minutes -->
+          </select>
+          <span>m</span>
+          <select id="ref-wheel-sec" class="ref-wheel-select" onchange="onWheelTimeChange()">
+            <!-- Options 00 à 59 secondes -->
+          </select>
+          <span>s</span>
+        </div>
+      </div>
+
+      <!-- DEUX ÉQUIPES : SÉLECTION FILIÈRE & SCORE -->
+      <div class="ref-teams-grid">
+        <!-- ÉQUIPE A -->
+        <div class="ref-team-box" id="ref-card-a">
+          <label style="font-size: 0.72rem; color: #94a3b8; font-weight: 800; text-transform: uppercase; margin-bottom: 0.2rem;">Équipe A</label>
+          <select id="ref-filiere-a" class="ref-filiere-select" onchange="onFiliereChange('A')">
+            <!-- Rempli en JS avec les filières -->
+          </select>
+          <input type="text" id="ref-name-a" class="ref-team-name-custom" value="Matméca" placeholder="Nom Équipe A" onchange="onMetaChange()" />
+          
+          <div id="ref-score-a" class="ref-score-big" style="color: #ef4444;">0</div>
+
+          <div class="ref-score-actions">
+            <button class="btn-score-big btn-plus" onclick="changeScore('A', 1)">+1</button>
+            <button class="btn-score-big btn-minus" onclick="changeScore('A', -1)">-1</button>
+          </div>
+        </div>
+
+        <!-- ÉQUIPE B -->
+        <div class="ref-team-box" id="ref-card-b">
+          <label style="font-size: 0.72rem; color: #94a3b8; font-weight: 800; text-transform: uppercase; margin-bottom: 0.2rem;">Équipe B</label>
+          <select id="ref-filiere-b" class="ref-filiere-select" onchange="onFiliereChange('B')">
+            <!-- Rempli en JS avec les filières -->
+          </select>
+          <input type="text" id="ref-name-b" class="ref-team-name-custom" value="Elec" placeholder="Nom Équipe B" onchange="onMetaChange()" />
+          
+          <div id="ref-score-b" class="ref-score-big" style="color: #2563eb;">0</div>
+
+          <div class="ref-score-actions">
+            <button class="btn-score-big btn-plus" onclick="changeScore('B', 1)">+1</button>
+            <button class="btn-score-big btn-minus" onclick="changeScore('B', -1)">-1</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOUTON RESET SCORES -->
+      <div class="ref-actions-footer">
+        <button class="btn btn-sm" onclick="resetScores()" style="background: rgba(255,255,255,0.08); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.1);">
+          Réinitialiser scores (0 - 0)
+        </button>
+        <button class="btn btn-sm" onclick="addNewLiveMatchSlot()" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8; font-weight: 700;">
+          + Nouveau Match
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="ref-footer-bar">
+    <span>TIP • Interface Arbitre</span>
+    <a href="admin.html" style="color: var(--accent-primary, #38bdf8); text-decoration: none; font-weight: 700;">← Retour Admin</a>
+  </footer>
+
+  <script src="app.js"></script>
+  <script>
+    // ID du match actuellement sélectionné par cet arbitre
+    let currentMatchId = "match_1";
+
+    // Récupérer l'ID depuis l'URL si fourni (ex: arbitre.html?match=match_2)
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const mParam = urlParams.get("match");
+      if (mParam) currentMatchId = mParam;
+    } catch (e) {}
+
+    // Remplir les sélecteurs de durée (0 à 60 minutes, 0 à 59 secondes)
+    function populateWheelSelects() {
+      const minSel = document.getElementById("ref-wheel-min");
+      const secSel = document.getElementById("ref-wheel-sec");
+      if (!minSel || !secSel) return;
+
+      let minHtml = "";
+      for (let m = 0; m <= 60; m++) {
+        minHtml += `<option value="${m}">${String(m).padStart(2, "0")}</option>`;
+      }
+      minSel.innerHTML = minHtml;
+
+      let secHtml = "";
+      for (let s = 0; s < 60; s++) {
+        secHtml += `<option value="${s}">${String(s).padStart(2, "0")}</option>`;
+      }
+      secSel.innerHTML = secHtml;
+    }
+
+    // Initialisation des filières dans les selects
+    function populateFiliereSelects() {
+      const selA = document.getElementById("ref-filiere-a");
+      const selB = document.getElementById("ref-filiere-b");
+      if (!selA || !selB) return;
+
+      const optsHtml = FILIERES.map(f => {
+        return `<option value="${f.id}" data-color="${f.hex}">${f.name} (${f.colorName})</option>`;
+      }).join("");
+
+      selA.innerHTML = optsHtml;
+      selB.innerHTML = optsHtml;
+    }
+
+    // Assure l'existence du tableau de matches et renvoie le match actuel
+    function getActiveMatchRecord(state) {
+      if (!state.liveMatches || typeof state.liveMatches !== "object") {
+        state.liveMatches = {};
+      }
+      // Migration rétrocompatible depuis liveScore unique
+      if (Object.keys(state.liveMatches).length === 0) {
+        state.liveMatches["match_1"] = {
+          id: "match_1",
+          active: Boolean(state.liveScore && state.liveScore.active),
+          title: (state.liveScore && state.liveScore.title) || "FINALE FOOTBALL",
+          teamAName: (state.liveScore && state.liveScore.teamAName) || "Matméca",
+          teamAColor: (state.liveScore && state.liveScore.teamAColor) || "#ef4444",
+          teamAFiliereId: (state.liveScore && state.liveScore.teamAFiliereId) || "matmeca",
+          scoreA: (state.liveScore && state.liveScore.scoreA) || 0,
+          teamBName: (state.liveScore && state.liveScore.teamBName) || "Elec",
+          teamBColor: (state.liveScore && state.liveScore.teamBColor) || "#2563eb",
+          teamBFiliereId: (state.liveScore && state.liveScore.teamBFiliereId) || "elec",
+          scoreB: (state.liveScore && state.liveScore.scoreB) || 0,
+          timerMinutes: (state.liveScore && state.liveScore.timerMinutes !== undefined) ? state.liveScore.timerMinutes : 10,
+          timerSeconds: (state.liveScore && state.liveScore.timerSeconds !== undefined) ? state.liveScore.timerSeconds : 0,
+          timerRunning: (state.liveScore && state.liveScore.timerRunning) || false,
+          timerEndsAt: (state.liveScore && state.liveScore.timerEndsAt) || null,
+          timerRemainingOnPause: (state.liveScore && state.liveScore.timerRemainingOnPause !== undefined) ? state.liveScore.timerRemainingOnPause : 600,
+          updatedAt: Date.now()
+        };
+      }
+
+      if (!state.liveMatches[currentMatchId]) {
+        state.liveMatches[currentMatchId] = {
+          id: currentMatchId,
+          active: false,
+          title: "MATCH " + currentMatchId.replace("match_", ""),
+          teamAName: "Info",
+          teamAColor: "#22c55e",
+          teamAFiliereId: "info",
+          scoreA: 0,
+          teamBName: "Télécom",
+          teamBColor: "#facc15",
+          teamBFiliereId: "telecom",
+          scoreB: 0,
+          timerMinutes: 10,
+          timerSeconds: 0,
+          timerRunning: false,
+          timerEndsAt: null,
+          timerRemainingOnPause: 600,
+          updatedAt: Date.now()
+        };
+      }
+
+      return state.liveMatches[currentMatchId];
+    }
+
+    // Synchroniser liveScore (pour rétrocompatibilité de l'index vidéoprojecteur)
+    function syncLiveScoreObject(state) {
+      if (!state.liveMatches) return;
+      // Trouver le match actuellement projeté
+      let projectedMatch = Object.values(state.liveMatches).find(m => m.active);
+      if (projectedMatch) {
+        state.liveScore = { ...projectedMatch };
+      } else {
+        // Aucun n'est projeté
+        if (state.liveMatches[currentMatchId]) {
+          state.liveScore = { ...state.liveMatches[currentMatchId], active: false };
+        } else {
+          state.liveScore = { active: false };
+        }
+      }
+    }
+
+    // Mettre à jour la liste déroulante des matchs disponibles
+    function updateMatchIdSelect(state) {
+      const select = document.getElementById("ref-match-id-select");
+      if (!select) return;
+
+      const matches = Object.values(state.liveMatches || {});
+      select.innerHTML = matches.map(m => {
+        const star = m.active ? " 📺 (PROJETÉ)" : "";
+        return `<option value="${m.id}" ${m.id === currentMatchId ? "selected" : ""}>Match ${m.id.replace("match_", "")}: ${m.title || "Match"}${star}</option>`;
+      }).join("");
+    }
+
+    function switchCurrentMatch(matchId) {
+      currentMatchId = matchId;
+      try {
+        const url = new URL(window.location);
+        url.searchParams.set("match", matchId);
+        window.history.replaceState({}, "", url);
+      } catch (e) {}
+      renderRefereeView();
+    }
+
+    function addNewLiveMatchSlot() {
+      const state = loadState();
+      if (!state.liveMatches) state.liveMatches = {};
+      const count = Object.keys(state.liveMatches).length + 1;
+      const newId = `match_${count}`;
+      state.liveMatches[newId] = {
+        id: newId,
+        active: false,
+        title: `MATCH ${count}`,
+        teamAName: "Matméca",
+        teamAColor: "#ef4444",
+        teamAFiliereId: "matmeca",
+        scoreA: 0,
+        teamBName: "SEE",
+        teamBColor: "#f472b6",
+        teamBFiliereId: "see",
+        scoreB: 0,
+        timerMinutes: 10,
+        timerSeconds: 0,
+        timerRunning: false,
+        timerEndsAt: null,
+        timerRemainingOnPause: 600,
+        updatedAt: Date.now()
+      };
+      saveState(state);
+      switchCurrentMatch(newId);
+    }
+
+    function renderRefereeView() {
+      const state = loadState();
+      const live = getActiveMatchRecord(state);
+      updateMatchIdSelect(state);
+
+      const titleEl = document.getElementById("ref-match-title");
+      const selA = document.getElementById("ref-filiere-a");
+      const selB = document.getElementById("ref-filiere-b");
+      const nameA = document.getElementById("ref-name-a");
+      const nameB = document.getElementById("ref-name-b");
+      const scoreAEl = document.getElementById("ref-score-a");
+      const scoreBEl = document.getElementById("ref-score-b");
+      const cardA = document.getElementById("ref-card-a");
+      const cardB = document.getElementById("ref-card-b");
+      const projBtn = document.getElementById("ref-proj-btn");
+      const minWheel = document.getElementById("ref-wheel-min");
+      const secWheel = document.getElementById("ref-wheel-sec");
+
+      if (titleEl && document.activeElement !== titleEl) {
+        titleEl.value = live.title || "FINALE";
+      }
+
+      // Filière A
+      if (selA && live.teamAFiliereId) {
+        selA.value = live.teamAFiliereId;
+      }
+      if (nameA && document.activeElement !== nameA) {
+        nameA.value = live.teamAName || "Équipe A";
+      }
+      const colA = live.teamAColor || "#ef4444";
+      if (cardA) cardA.style.borderTopColor = colA;
+      if (scoreAEl) {
+        scoreAEl.textContent = live.scoreA !== undefined ? live.scoreA : 0;
+        scoreAEl.style.color = colA;
+      }
+
+      // Filière B
+      if (selB && live.teamBFiliereId) {
+        selB.value = live.teamBFiliereId;
+      }
+      if (nameB && document.activeElement !== nameB) {
+        nameB.value = live.teamBName || "Équipe B";
+      }
+      const colB = live.teamBColor || "#2563eb";
+      if (cardB) cardB.style.borderTopColor = colB;
+      if (scoreBEl) {
+        scoreBEl.textContent = live.scoreB !== undefined ? live.scoreB : 0;
+        scoreBEl.style.color = colB;
+      }
+
+      // Molettes minutes et secondes
+      if (minWheel && document.activeElement !== minWheel) {
+        minWheel.value = live.timerMinutes !== undefined ? live.timerMinutes : 10;
+      }
+      if (secWheel && document.activeElement !== secWheel) {
+        secWheel.value = live.timerSeconds !== undefined ? live.timerSeconds : 0;
+      }
+
+      // Gestion de la projection exclusive :
+      // Vérifier si un AUTRE match est actuellement projeté
+      let otherProjectedMatch = null;
+      if (state.liveMatches) {
+        otherProjectedMatch = Object.values(state.liveMatches).find(m => m.id !== currentMatchId && m.active);
+      }
+
+      if (projBtn) {
+        if (live.active) {
+          projBtn.className = "btn btn-danger btn-sm";
+          projBtn.disabled = false;
+          projBtn.title = "Cliquez pour retirer ce match de l'écran";
+          projBtn.innerHTML = "🔴 Retirer de l'Écran";
+        } else if (otherProjectedMatch) {
+          // Un autre match est déjà projeté : désactiver le bouton pour ce match !
+          projBtn.className = "btn btn-sm";
+          projBtn.style.background = "#475569";
+          projBtn.style.color = "#94a3b8";
+          projBtn.style.cursor = "not-allowed";
+          projBtn.disabled = true;
+          projBtn.title = `Déjà occupé par "${otherProjectedMatch.title || otherProjectedMatch.id}". Cet autre match doit d'abord être retiré.`;
+          projBtn.innerHTML = `🔒 Écran Occupé (${otherProjectedMatch.id.replace("match_", "M")})`;
+        } else {
+          // Libre : peut être projeté
+          projBtn.className = "btn btn-warning btn-sm";
+          projBtn.style.background = "";
+          projBtn.style.color = "";
+          projBtn.style.cursor = "pointer";
+          projBtn.disabled = false;
+          projBtn.title = "Projeter ce match en plein écran sur le vidéoprojecteur";
+          projBtn.innerHTML = "📺 Projeter Plein Écran";
+        }
+      }
+
+      updateTimerUI(live);
+    }
+
+    function updateTimerUI(live) {
+      const timerEl = document.getElementById("ref-timer-display");
+      const toggleBtn = document.getElementById("ref-timer-toggle-btn");
+      if (!timerEl) return;
+
+      let remaining = 0;
+      if (live.timerRunning && live.timerEndsAt) {
+        remaining = Math.max(0, Math.round((live.timerEndsAt - Date.now()) / 1000));
+      } else {
+        const totalInitSec = ((live.timerMinutes || 0) * 60) + (live.timerSeconds || 0);
+        remaining = live.timerRemainingOnPause !== undefined ? live.timerRemainingOnPause : (totalInitSec || 600);
+      }
+
+      const m = Math.floor(remaining / 60);
+      const s = remaining % 60;
+      timerEl.textContent = `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+
+      if (toggleBtn) {
+        if (live.timerRunning) {
+          toggleBtn.className = "ref-timer-btn btn-warning";
+          toggleBtn.innerHTML = "⏸ Pause";
+        } else {
+          toggleBtn.className = "ref-timer-btn btn-primary";
+          toggleBtn.innerHTML = "▶ Démarrer";
+        }
+      }
+    }
+
+    function onWheelTimeChange() {
+      const minWheel = document.getElementById("ref-wheel-min");
+      const secWheel = document.getElementById("ref-wheel-sec");
+      const m = parseInt(minWheel ? minWheel.value : 10, 10) || 0;
+      const s = parseInt(secWheel ? secWheel.value : 0, 10) || 0;
+      const totalSec = (m * 60) + s;
+
+      const state = loadState();
+      const live = getActiveMatchRecord(state);
+      live.timerMinutes = m;
+      live.timerSeconds = s;
+      live.timerRunning = false;
+      live.timerEndsAt = null;
+      live.timerRemainingOnPause = totalSec;
+      live.updatedAt = Date.now();
+
+      syncLiveScoreObject(state);
+      saveState(state);
+      renderRefereeView();
+    }
+
+    function onFiliereChange(team) {
+      const state = loadState();
+      const live = getActiveMatchRecord(state);
+
+      if (team === "A") {
+        const selA = document.getElementById("ref-filiere-a");
+        const filId = selA.value;
+        const fil = getFiliereById(filId);
+        live.teamAFiliereId = fil.id;
+        live.teamAName = fil.name;
+        live.teamAColor = fil.hex;
+      } else {
+        const selB = document.getElementById("ref-filiere-b");
+        const filId = selB.value;
+        const fil = getFiliereById(filId);
+        live.teamBFiliereId = fil.id;
+        live.teamBName = fil.name;
+        live.teamBColor = fil.hex;
+      }
+
+      live.updatedAt = Date.now();
+      syncLiveScoreObject(state);
+      saveState(state);
+      renderRefereeView();
+    }
+
+    function onMetaChange() {
+      const state = loadState();
+      const live = getActiveMatchRecord(state);
+
+      const titleEl = document.getElementById("ref-match-title");
+      const nameA = document.getElementById("ref-name-a");
+      const nameB = document.getElementById("ref-name-b");
+
+      if (titleEl) live.title = titleEl.value.trim() || "FINALE";
+      if (nameA) live.teamAName = nameA.value.trim() || "Équipe A";
+      if (nameB) live.teamBName = nameB.value.trim() || "Équipe B";
+
+      live.updatedAt = Date.now();
+      syncLiveScoreObject(state);
+      saveState(state);
+      renderRefereeView();
+    }
+
+    function changeScore(team, delta) {
+      const state = loadState();
+      const live = getActiveMatchRecord(state);
+
+      if (team === "A") {
+        live.scoreA = Math.max(0, (live.scoreA || 0) + delta);
+      } else {
+        live.scoreB = Math.max(0, (live.scoreB || 0) + delta);
+      }
+
+      live.updatedAt = Date.now();
+      syncLiveScoreObject(state);
+      saveState(state);
+      renderRefereeView();
+    }
+
+    function resetScores() {
+      if (confirm("Remettre les scores à 0 - 0 ?")) {
+        const state = loadState();
+        const live = getActiveMatchRecord(state);
+        live.scoreA = 0;
+        live.scoreB = 0;
+        live.updatedAt = Date.now();
+        syncLiveScoreObject(state);
+        saveState(state);
+        renderRefereeView();
+      }
+    }
+
+    function toggleTimer() {
+      const state = loadState();
+      const live = getActiveMatchRecord(state);
+
+      if (live.timerRunning) {
+        const remaining = Math.max(0, Math.round(((live.timerEndsAt || Date.now()) - Date.now()) / 1000));
+        live.timerRunning = false;
+        live.timerRemainingOnPause = remaining;
+        live.timerEndsAt = null;
+      } else {
+        const totalInitSec = ((live.timerMinutes || 0) * 60) + (live.timerSeconds || 0);
+        const durationSec = live.timerRemainingOnPause !== undefined ? live.timerRemainingOnPause : (totalInitSec || 600);
+        const toRun = durationSec <= 0 ? (totalInitSec || 600) : durationSec;
+        live.timerRemainingOnPause = toRun;
+        live.timerRunning = true;
+        live.timerEndsAt = Date.now() + (toRun * 1000);
+      }
+
+      live.updatedAt = Date.now();
+      syncLiveScoreObject(state);
+      saveState(state);
+      renderRefereeView();
+    }
+
+    function resetTimer() {
+      const state = loadState();
+      const live = getActiveMatchRecord(state);
+      const totalInitSec = ((live.timerMinutes || 0) * 60) + (live.timerSeconds || 0);
+      live.timerRunning = false;
+      live.timerEndsAt = null;
+      live.timerRemainingOnPause = totalInitSec || 600;
+      live.updatedAt = Date.now();
+      syncLiveScoreObject(state);
+      saveState(state);
+      renderRefereeView();
+    }
+
+    function toggleProjection() {
+      const state = loadState();
+      const live = getActiveMatchRecord(state);
+
+      if (!live.active) {
+        // Tentative d'activer la projection pour ce match
+        // Vérifier si un autre match est déjà projeté
+        const occupied = Object.values(state.liveMatches || {}).find(m => m.id !== currentMatchId && m.active);
+        if (occupied) {
+          alert(`Impossible de projeter : le match "${occupied.title || occupied.id}" est déjà affiché en plein écran sur le vidéoprojecteur !\n\nL'autre arbitre ou l'admin doit d'abord le désactiver.`);
+          return;
+        }
+        live.active = true;
+      } else {
+        // Désactivation
+        live.active = false;
+      }
+
+      live.updatedAt = Date.now();
+      syncLiveScoreObject(state);
+      saveState(state);
+      renderRefereeView();
+    }
+
+    // Boucle de décompte du chrono et alarme de fin de match
+    setInterval(() => {
+      const state = loadState();
+      if (!state.liveMatches) return;
+      const live = state.liveMatches[currentMatchId];
+      if (live && live.timerRunning && live.timerEndsAt) {
+        updateTimerUI(live);
+        if (Date.now() >= live.timerEndsAt) {
+          live.timerRunning = false;
+          live.timerEndsAt = null;
+          live.timerRemainingOnPause = 0;
+          live.updatedAt = Date.now();
+          syncLiveScoreObject(state);
+          saveState(state);
+          renderRefereeView();
+          if (typeof playMatchEndBuzzer === "function") {
+            playMatchEndBuzzer();
+          }
+        }
+      }
+    }, 500);
+
+    // Initialisation
+    document.addEventListener("DOMContentLoaded", () => {
+      populateWheelSelects();
+      populateFiliereSelects();
+      renderRefereeView();
+      initServerSync();
+
+      window.addEventListener("storage", () => {
+        renderRefereeView();
+      });
+      window.addEventListener("tip:state_updated", () => {
+        renderRefereeView();
+      });
+    });
+  </script>
+</body>
+</html>
