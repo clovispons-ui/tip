@@ -1,22 +1,28 @@
 /**
  * SERVEUR LOCAL AUTONOME - TOURNOI INTER-FILIÈRES (TIP)
  * Zéro dépendance npm requise (fonctionne avec Node.js standard)
- * 
+ *
  * Lancement :
  *   node server.js
  * ou depuis la racine :
  *   node tip/server.js
- * 
+ *
  * Options CLI :
  *   --port <port>          Port d'écoute (défaut : 8080 ou $PORT)
  *   --public-url <url>     URL publique 4G forcée (défaut : $PUBLIC_URL)
  *   --no-tunnel            Désactiver la tentative de tunnel Cloudflare
+ *
+ * Variables d'environnement :
+ *   ADMIN_PASSWORD         Mot de passe admin requis pour les écritures API
+ *                          (défaut : voir DEFAULT_ADMIN_PASSWORD ci-dessous,
+ *                           à remplacer impérativement via cette variable)
  */
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { spawn } = require('child_process');
 
 // Analyse des arguments en ligne de commande
@@ -40,23 +46,153 @@ const ROOT_DIR = __dirname;
 const DATA_DIR = path.join(ROOT_DIR, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'tournament_state.json');
 
+// ============================================================================
+// 🔒 SÉCURITÉ : jeton d'administration requis pour TOUTE écriture (POST /api/*)
+// Le client calcule sha256(motDePasse + "_TIP_AUTH_OK") à la connexion admin
+// (voir admin.html) et l'envoie dans l'en-tête X-Admin-Token.
+// ============================================================================
+const DEFAULT_ADMIN_PASSWORD = 'BDSBDEBAR'; // ⚠️ à remplacer via ADMIN_PASSWORD
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || DEFAULT_ADMIN_PASSWORD;
+const EXPECTED_ADMIN_TOKEN = crypto.createHash('sha256')
+  .update(ADMIN_PASSWORD + '_TIP_AUTH_OK')
+  .digest('hex');
+const MAX_BODY_SIZE = 2 * 1024 * 1024; // 2 Mo max par requête POST
+const MAX_SSE_CLIENTS = 200;
+const FLASH_LEVELS = new Set(['urgent', 'info', 'call']);
+
+// Fichiers statiques autorisés (liste blanche : .git, .bin, data/, etc. ne sont JAMAIS servis)
+const STATIC_ALLOWLIST = new Set([
+  '/', '/index.html', '/admin.html', '/arbitre.html',
+  '/app.js', '/qrcode.js', '/style.css'
+]);
+
+function log(...args) {
+  console.log(new Date().toISOString(), ...args);
+}
+
+function isAdminRequest(req) {
+  const token = req.headers['x-admin-token'];
+  if (!token || typeof token !== 'string') return false;
+  const a = Buffer.from(token, 'utf-8');
+  const b = Buffer.from(EXPECTED_ADMIN_TOKEN, 'utf-8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function sendJson(res, status, obj) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(obj));
+}
+
+// Lecture du corps avec limite de taille + parse JSON sécurisé
+function readJsonBody(req, res, onSuccess) {
+  let body = '';
+  let aborted = false;
+  req.on('data', chunk => {
+    body += chunk;
+    if (body.length > MAX_BODY_SIZE) {
+      aborted = true;
+      req.destroy();
+    }
+  });
+  req.on('end', () => {
+    if (aborted) {
+      sendJson(res, 413, { error: 'Payload trop volumineux (max 2 Mo)' });
+      return;
+    }
+    try {
+      onSuccess(JSON.parse(body));
+    } catch (e) {
+      sendJson(res, 400, { error: 'Format JSON invalide' });
+    }
+  });
+  req.on('error', () => {
+    if (!res.headersSent) sendJson(res, 400, { error: 'Lecture du corps interrompue' });
+  });
+}
+
+// Écriture atomique de l'état (tmp + rename) pour éviter un fichier tronqué en cas de crash
+function writeStateFile(state) {
+  const tmp = STATE_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(state, null, 2), 'utf-8');
+  fs.renameSync(tmp, STATE_FILE);
+}
+
+// Validation minimale de la forme de l'état (empêche qu'un POST vide n'efface tout)
+function isValidTournamentState(state) {
+  if (!state || typeof state !== 'object' || Array.isArray(state)) return false;
+  const sports = state.sports;
+  if (!sports || typeof sports !== 'object' || Array.isArray(sports)) return false;
+  const ids = Object.keys(sports);
+  if (ids.length === 0) return false;
+  return ids.every(id => sports[id] && Array.isArray(sports[id].teams));
+}
+
+function sanitizeFlashInfo(f) {
+  if (!f || typeof f !== 'object' || Array.isArray(f)) return null;
+  return {
+    active: Boolean(f.active),
+    message: String(f.message || '').slice(0, 500),
+    level: FLASH_LEVELS.has(f.level) ? f.level : 'urgent',
+    timestamp: typeof f.timestamp === 'string' ? f.timestamp : new Date().toISOString()
+  };
+}
+
+// Validation stricte de l'URL publique (scheme http/https uniquement)
+function sanitizePublicUrl(val) {
+  if (!val) return null;
+  try {
+    const u = new URL(String(val).trim());
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    return (u.origin + u.pathname).replace(/\/+$/, '');
+  } catch (e) {
+    return null;
+  }
+}
+
 // S'assurer que le dossier data existe
 if (!fs.existsSync(DATA_DIR)) {
-  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {}
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) {
+    log('❌ Impossible de créer le dossier data/ :', e.message);
+  }
+}
+
+// Dernier lastUpdated connu (chargé au boot, mis à jour à chaque écriture)
+let lastSavedStateUpdated = null;
+try {
+  if (fs.existsSync(STATE_FILE)) {
+    const existing = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+    if (existing && typeof existing.lastUpdated === 'string') {
+      lastSavedStateUpdated = existing.lastUpdated;
+    }
+  }
+} catch (e) {
+  log('⚠️  Fichier d\'état illisible au démarrage (ignoré) :', e.message);
+}
+
+// Refuse les écritures périmées (dernier arrivé, dernier servi)
+function stateIsNewer(state) {
+  const incoming = state && typeof state.lastUpdated === 'string' ? state.lastUpdated : null;
+  if (lastSavedStateUpdated && incoming && incoming < lastSavedStateUpdated) return false;
+  if (incoming) lastSavedStateUpdated = incoming;
+  return true;
 }
 
 // Détection de l'adresse IP locale non interne (pour accès smartphone)
 function getLocalIpAddress() {
   const interfaces = os.networkInterfaces();
+  // Préférer les interfaces physiques (eth/wlan/en) aux VPN/tunnels (tun/tap/docker/vmnet)
+  const preferred = /^(eth|en|wlan|wl|wifi)/i;
+  const fallback = /^(tun|tap|docker|vmnet|utun|wg)/i;
+  let fallbackAddr = null;
   for (const name of Object.keys(interfaces)) {
     for (const iface of interfaces[name]) {
-      // Filtrer les adresses IPv4 non internes
       if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
+        if (preferred.test(name)) return iface.address;
+        if (!fallback.test(name) && !fallbackAddr) fallbackAddr = iface.address;
       }
     }
   }
-  return 'localhost';
+  return fallbackAddr || 'localhost';
 }
 
 const LOCAL_IP = getLocalIpAddress();
@@ -74,6 +210,10 @@ const sseClients = new Set();
 function broadcastEvent(type, payload) {
   const message = `data: ${JSON.stringify({ type, ...payload })}\n\n`;
   for (const client of sseClients) {
+    if (client.destroyed || client.writableEnded) {
+      sseClients.delete(client);
+      continue;
+    }
     try {
       client.write(message);
     } catch (e) {
@@ -85,6 +225,10 @@ function broadcastEvent(type, payload) {
 // Heartbeat SSE toutes les 20 secondes pour empêcher la coupure proxy/Cloudflare (timeout 100s)
 const keepaliveTimer = setInterval(() => {
   for (const client of sseClients) {
+    if (client.destroyed || client.writableEnded) {
+      sseClients.delete(client);
+      continue;
+    }
     try {
       client.write(': keepalive\n\n');
     } catch (e) {
@@ -107,10 +251,12 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
-  // CORS pour faciliter le développement et l'accès réseau
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // En-têtes de sécurité (pas de CORS wildcard : toutes les requêtes sont same-origin)
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; media-src 'self'; object-src 'none'");
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -118,123 +264,147 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  // Ne JAMAIS construire l'URL de base à partir de l'en-tête Host (contrôlé par le client) :
+  // un Host malformé faisait planter tout le processus (TypeError non intercepté).
+  let url;
+  try {
+    url = new URL(req.url, 'http://localhost');
+  } catch (e) {
+    res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Requête invalide');
+    return;
+  }
 
   // ==========================================================================
   // 1. ENDPOINTS D'API
   // ==========================================================================
 
-  // Info réseau du serveur (IP, port, URL smartphone, statut 4G)
+  // Info réseau du serveur (lecture seule, publique)
   if (url.pathname === '/api/info' && req.method === 'GET') {
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({
+    sendJson(res, 200, {
       localIp: LOCAL_IP,
       port: PORT,
       publicUrl: PUBLIC_URL,
       mobileUrl: getEffectiveMobileUrl(),
       adminUrl: `http://${LOCAL_IP}:${PORT}/admin.html`,
       tunnelActive: Boolean(PUBLIC_URL)
-    }));
-    return;
-  }
-
-  // Mise à jour dynamique de l'URL publique (depuis un runner, script externe ou admin)
-  if (url.pathname === '/api/public-url' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
-      try {
-        const payload = JSON.parse(body);
-        if (payload.publicUrl !== undefined) {
-          PUBLIC_URL = payload.publicUrl ? payload.publicUrl.trim().replace(/\/+$/, '') : null;
-          broadcastEvent('TUNNEL_UPDATE', {
-            publicUrl: PUBLIC_URL,
-            mobileUrl: getEffectiveMobileUrl(),
-            tunnelActive: Boolean(PUBLIC_URL)
-          });
-          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-          res.end(JSON.stringify({
-            status: 'ok',
-            publicUrl: PUBLIC_URL,
-            mobileUrl: getEffectiveMobileUrl(),
-            tunnelActive: Boolean(PUBLIC_URL)
-          }));
-          return;
-        }
-        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ error: "Champ publicUrl requis" }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ error: "Format JSON invalide" }));
-      }
     });
     return;
   }
 
-  // Lecture de l'état partagé
+  // Mise à jour dynamique de l'URL publique (admin authentifié uniquement)
+  if (url.pathname === '/api/public-url' && req.method === 'POST') {
+    if (!isAdminRequest(req)) {
+      sendJson(res, 401, { error: 'Non autorisé' });
+      return;
+    }
+    readJsonBody(req, res, (payload) => {
+      if (payload.publicUrl === undefined) {
+        sendJson(res, 400, { error: 'Champ publicUrl requis' });
+        return;
+      }
+      const clean = sanitizePublicUrl(payload.publicUrl);
+      if (payload.publicUrl && !clean) {
+        sendJson(res, 400, { error: 'URL invalide (http/https uniquement)' });
+        return;
+      }
+      PUBLIC_URL = clean;
+      log('🔗 URL publique mise à jour :', PUBLIC_URL || '(désactivée)');
+      broadcastEvent('TUNNEL_UPDATE', {
+        publicUrl: PUBLIC_URL,
+        mobileUrl: getEffectiveMobileUrl(),
+        tunnelActive: Boolean(PUBLIC_URL)
+      });
+      sendJson(res, 200, {
+        status: 'ok',
+        publicUrl: PUBLIC_URL,
+        mobileUrl: getEffectiveMobileUrl(),
+        tunnelActive: Boolean(PUBLIC_URL)
+      });
+    });
+    return;
+  }
+
+  // Lecture de l'état partagé (lecture seule, publique) — servi en JSON compact (~34 % plus léger)
   if (url.pathname === '/api/state' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     if (fs.existsSync(STATE_FILE)) {
       try {
-        const data = fs.readFileSync(STATE_FILE, 'utf-8');
-        res.end(data);
+        res.end(JSON.stringify(JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'))));
         return;
-      } catch (e) {}
+      } catch (e) {
+        log('❌ Erreur lecture état :', e.message);
+      }
     }
-    res.end(JSON.stringify({ error: "Aucun état enregistré" }));
+    sendJson(res, 200, { error: "Aucun état enregistré" });
     return;
   }
 
-  // Enregistrement de l'état partagé (depuis l'admin)
+  // Enregistrement de l'état partagé (admin authentifié uniquement)
   if (url.pathname === '/api/state' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
-      try {
-        const state = JSON.parse(body);
-        fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf-8');
-        broadcastEvent('STATE_UPDATE', { state });
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ success: true }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ error: "Format JSON invalide" }));
+    if (!isAdminRequest(req)) {
+      sendJson(res, 401, { error: 'Non autorisé' });
+      return;
+    }
+    readJsonBody(req, res, (state) => {
+      if (!isValidTournamentState(state)) {
+        sendJson(res, 400, { error: 'État invalide (sports/teams manquants)' });
+        return;
       }
+      if (!stateIsNewer(state)) {
+        sendJson(res, 409, { error: 'État périmé refusé (lastUpdated antérieur)' });
+        return;
+      }
+      try {
+        writeStateFile(state);
+      } catch (e) {
+        log('❌ Échec écriture état :', e.message);
+        sendJson(res, 500, { error: "Échec d'enregistrement sur le disque" });
+        return;
+      }
+      broadcastEvent('STATE_UPDATE', { state });
+      sendJson(res, 200, { success: true });
     });
     return;
   }
 
-  // Flash Info direct
+  // Flash Info direct (admin authentifié uniquement)
   if (url.pathname === '/api/flash' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
-      try {
-        const flashInfo = JSON.parse(body);
-        // Persister le flashInfo dans STATE_FILE pour les clients qui se connectent ou rafraîchissent
-        try {
-          if (fs.existsSync(STATE_FILE)) {
-            const raw = fs.readFileSync(STATE_FILE, 'utf-8');
-            const state = JSON.parse(raw);
-            state.flashInfo = flashInfo;
-            fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), 'utf-8');
-            broadcastEvent('STATE_UPDATE', { state });
-          }
-        } catch (errPersist) {}
-
-        broadcastEvent('FLASH_INFO', { flashInfo });
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ success: true }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ error: "Format JSON invalide" }));
+    if (!isAdminRequest(req)) {
+      sendJson(res, 401, { error: 'Non autorisé' });
+      return;
+    }
+    readJsonBody(req, res, (rawFlash) => {
+      const flashInfo = sanitizeFlashInfo(rawFlash);
+      if (!flashInfo) {
+        sendJson(res, 400, { error: 'flashInfo invalide' });
+        return;
       }
+      // Persister le flashInfo dans STATE_FILE pour les clients qui se connectent ou rafraîchissent
+      try {
+        if (fs.existsSync(STATE_FILE)) {
+          const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+          state.flashInfo = flashInfo;
+          if (typeof state.lastUpdated === 'string') lastSavedStateUpdated = state.lastUpdated;
+          writeStateFile(state);
+          broadcastEvent('STATE_UPDATE', { state });
+        }
+      } catch (errPersist) {
+        log('⚠️  Flash non persisté (sera quand même diffusé) :', errPersist.message);
+      }
+
+      broadcastEvent('FLASH_INFO', { flashInfo });
+      sendJson(res, 200, { success: true });
     });
     return;
   }
 
-  // Flux SSE (Server-Sent Events) pour synchronisation temps réel
+  // Flux SSE (Server-Sent Events) pour synchronisation temps réel (lecture seule, publique)
   if (url.pathname === '/api/events') {
+    if (sseClients.size >= MAX_SSE_CLIENTS) {
+      sendJson(res, 503, { error: 'Trop de clients SSE connectés' });
+      return;
+    }
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform', // no-transform empêche la compression/mise en mémoire tampon par Cloudflare
@@ -255,43 +425,85 @@ const server = http.createServer((req, res) => {
       try {
         const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
         res.write(`data: ${JSON.stringify({ type: 'STATE_UPDATE', state })}\n\n`);
-      } catch (e) {}
+      } catch (e) {
+        log('⚠️  État initial SSE non envoyé (JSON illisible) :', e.message);
+      }
     }
 
     sseClients.add(res);
-    req.on('close', () => {
-      sseClients.delete(res);
-    });
+    // Un client qui se déconnecte brutalement ne doit jamais faire planter le processus
+    res.on('error', () => sseClients.delete(res));
+    req.on('close', () => sseClients.delete(res));
     return;
   }
 
   // ==========================================================================
-  // 2. DISTRIBUTION DES FICHIERS STATIQUES (HTML, CSS, JS)
+  // 2. DISTRIBUTION DES FICHIERS STATIQUES (liste blanche uniquement)
   // ==========================================================================
-  let filePath = path.join(ROOT_DIR, url.pathname === '/' ? 'index.html' : url.pathname);
+  const pathname = url.pathname;
+  if (!STATIC_ALLOWLIST.has(pathname)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Fichier non trouvé');
+    return;
+  }
 
-  // Sécurité traversée de dossier
-  if (!filePath.startsWith(ROOT_DIR)) {
+  let filePath = path.join(ROOT_DIR, pathname === '/' ? 'index.html' : pathname);
+
+  // Sécurité traversée de dossier (résolution réelle + préfixe avec séparateur)
+  const resolvedPath = path.resolve(filePath);
+  if (resolvedPath !== ROOT_DIR && !resolvedPath.startsWith(ROOT_DIR + path.sep)) {
     res.writeHead(403);
     res.end('Accès interdit');
     return;
   }
 
-  fs.stat(filePath, (err, stats) => {
+  fs.stat(resolvedPath, (err, stats) => {
     if (err || !stats.isFile()) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       res.end('Fichier non trouvé');
       return;
     }
 
-    const ext = path.extname(filePath).toLowerCase();
+    const ext = path.extname(resolvedPath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+    // Les pages HTML restent fraîches ; les assets (js/css) sont mis en cache avec revalidation
+    const isHtml = ext === '.html';
+    const cacheControl = isHtml ? 'no-cache, must-revalidate' : 'public, max-age=60';
+    const etag = `"${stats.size}-${Math.floor(stats.mtimeMs)}"`;
 
-    res.writeHead(200, {
-      'Content-Type': contentType,
-      'Cache-Control': 'no-cache, must-revalidate'
-    });
-    fs.createReadStream(filePath).pipe(res);
+    // Revalidation conditionnelle : 304 si le client a déjà la bonne version
+    const inm = req.headers['if-none-match'];
+    const ims = req.headers['if-modified-since'];
+    const notModified = (inm && inm === etag) ||
+      (!inm && ims && Math.floor(new Date(ims).getTime() / 1000) >= Math.floor(stats.mtimeMs / 1000));
+    if (!isHtml && notModified) {
+      res.writeHead(304, { 'ETag': etag, 'Cache-Control': cacheControl });
+      res.end();
+      return;
+    }
+
+    // Compression gzip pour les assets texte (économie ~70 % sur le tunnel 4G)
+    const acceptsGzip = String(req.headers['accept-encoding'] || '').includes('gzip');
+    const compressible = ['.html', '.js', '.css', '.json', '.svg'].includes(ext);
+    if (acceptsGzip && compressible && stats.size > 1024) {
+      const zlib = require('zlib');
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Encoding': 'gzip',
+        'Cache-Control': cacheControl,
+        'ETag': etag,
+        'Vary': 'Accept-Encoding'
+      });
+      fs.createReadStream(resolvedPath).pipe(zlib.createGzip()).pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Cache-Control': cacheControl,
+        'ETag': etag,
+        'Vary': 'Accept-Encoding'
+      });
+      fs.createReadStream(resolvedPath).pipe(res);
+    }
   });
 });
 
@@ -299,15 +511,15 @@ let tunnelProcess = null;
 
 function initTunnel(port) {
   if (noTunnel) {
-    console.log('ℹ️  Mode tunnel désactivé (--no-tunnel). Accès local uniquement.');
+    log('ℹ️  Mode tunnel désactivé (--no-tunnel). Accès local uniquement.');
     return;
   }
   if (PUBLIC_URL) {
-    console.log(`ℹ️  URL publique préconfigurée : ${PUBLIC_URL}`);
+    log(`ℹ️  URL publique préconfigurée : ${PUBLIC_URL}`);
     return;
   }
 
-  console.log('⏳ Recherche d\'un tunnel 4G public (Cloudflare Quick Tunnel)...');
+  log('⏳ Recherche d\'un tunnel 4G public (Cloudflare Quick Tunnel)...');
   const binary = process.env.CLOUDFLARED_BIN || 'cloudflared';
   let resolved = false;
 
@@ -316,7 +528,7 @@ function initTunnel(port) {
       stdio: ['ignore', 'pipe', 'pipe']
     });
   } catch (err) {
-    console.log(`ℹ️  Binaire ${binary} non disponible (${err.message}). Repli local : http://${LOCAL_IP}:${port}`);
+    log(`ℹ️  Binaire ${binary} non disponible (${err.message}). Repli local : http://${LOCAL_IP}:${port}`);
     return;
   }
 
@@ -328,11 +540,11 @@ function initTunnel(port) {
     if (match && !resolved) {
       resolved = true;
       PUBLIC_URL = match[0].replace(/\/+$/, '');
-      console.log('\n===============================================================');
-      console.log('🚀 ACCÈS 4G PUBLIC ACTIVÉ SANS WI-FI !');
-      console.log(`📱 URL Smartphone 4G : ${PUBLIC_URL}`);
-      console.log('✨ Le QR code sur le vidéoprojecteur est désormais public !');
-      console.log('===============================================================\n');
+      log('\n===============================================================');
+      log('🚀 ACCÈS 4G PUBLIC ACTIVÉ SANS WI-FI !');
+      log(`📱 URL Smartphone 4G : ${PUBLIC_URL}`);
+      log('✨ Le QR code sur le vidéoprojecteur est désormais public !');
+      log('===============================================================\n');
       broadcastEvent('TUNNEL_UPDATE', {
         publicUrl: PUBLIC_URL,
         mobileUrl: getEffectiveMobileUrl(),
@@ -346,13 +558,27 @@ function initTunnel(port) {
 
   tunnelProcess.on('error', (err) => {
     if (!resolved) {
-      console.log(`ℹ️  Tunnel cloudflared non disponible (${err.message}). Repli local : http://${LOCAL_IP}:${port}`);
+      log(`ℹ️  Tunnel cloudflared non disponible (${err.message}). Repli local : http://${LOCAL_IP}:${port}`);
     }
+  });
+
+  // Détection de la mort du tunnel : le QR ne doit pas pointer vers une URL morte
+  tunnelProcess.on('close', (code) => {
+    if (resolved) {
+      log(`⚠️  Le tunnel cloudflared s'est arrêté (code ${code}). Retour en mode réseau local.`);
+      PUBLIC_URL = null;
+      broadcastEvent('TUNNEL_UPDATE', {
+        publicUrl: null,
+        mobileUrl: getEffectiveMobileUrl(),
+        tunnelActive: false
+      });
+    }
+    tunnelProcess = null;
   });
 
   const timer = setTimeout(() => {
     if (!resolved) {
-      console.log(`⏱️  Délai d'établissement du tunnel dépassé (10s). Repli sur IP locale : http://${LOCAL_IP}:${port}`);
+      log(`⏱️  Délai d'établissement du tunnel dépassé (10s). Repli sur IP locale : http://${LOCAL_IP}:${port}`);
     }
   }, 10000);
   if (timer.unref) timer.unref();
@@ -368,6 +594,14 @@ function initTunnel(port) {
   process.on('exit', cleanup);
 }
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ Port ${PORT} déjà utilisé. Relancez avec un autre port, ex : PORT=8090 node server.js (ou PORT=8090 ./start.sh)\n`);
+    process.exit(1);
+  }
+  throw err;
+});
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log('\n===============================================================');
   console.log('🏆  SERVEUR DU TOURNOI INTER-PROMO (TIP) DÉMARRÉ AVEC SUCCÈS');
@@ -382,6 +616,10 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`   - Accès Direct    : http://${LOCAL_IP}:${PORT}/index.html`);
   }
   console.log(`\n✨ Le QR Code officiel s'affiche automatiquement sur le vidéoprojecteur !`);
+  if (!process.env.ADMIN_PASSWORD) {
+    console.log(`\n⚠️  ADMIN_PASSWORD non défini : le mot de passe admin par défaut est utilisé.`);
+    console.log(`   Pour sécuriser l'accès API (recommandé) : ADMIN_PASSWORD= votremotdepasse node server.js`);
+  }
   console.log('===============================================================\n');
 
   initTunnel(PORT);

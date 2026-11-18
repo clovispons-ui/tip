@@ -53,7 +53,7 @@ Cette application web autonome (HTML5 / CSS3 / Vanilla JavaScript) permet d'orga
 ## 🚀 Comment lancer l'application ?
 
 1. Décompressez l'archive **`tournoi_interfilieres.zip`**.
-2. Ouvrez **`admin.html`** dans votre navigateur sur votre ordinateur d'organisation (mot de passe initial : `BDSBDEBAR`).
+2. Ouvrez **`admin.html`** dans votre navigateur sur votre ordinateur d'organisation (mot de passe initial : `BDSBDEBAR`, à remplacer en lançant le serveur avec `ADMIN_PASSWORD=votremotdepasse ./start.sh`).
 3. Ouvrez **`index.html`** dans un second onglet ou déplacez-le sur votre second écran relié au vidéoprojecteur, puis appuyez sur **F11** pour passer en plein écran.
 4. Dès que vous saisissez un score, assignez un arbitre ou cliquez sur un bouton dans `admin.html`, l'affichage `index.html` se met à jour instantanément sans recharger la page !
 

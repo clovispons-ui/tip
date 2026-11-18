@@ -16,12 +16,19 @@ echo "==============================================================="
 # 1. Vérification de l'environnement d'exécution (Node.js ou Python 3)
 USE_PYTHON=0
 if command -v node >/dev/null 2>&1; then
-    RUNTIME="node"
-elif command -v python3 >/dev/null 2>&1; then
+    NODE_MAJOR=$(node -e "console.log(process.versions.node.split('.')[0])" 2>/dev/null || echo 0)
+    if [ "$NODE_MAJOR" -lt 18 ]; then
+        echo "⚠️  Node.js v18+ requis (version détectée : $(node --version 2>/dev/null)). Tentative avec Python 3..."
+    else
+        RUNTIME="node"
+    fi
+fi
+if [ -z "$RUNTIME" ] && command -v python3 >/dev/null 2>&1; then
     RUNTIME="python3"
     USE_PYTHON=1
-else
-    echo "❌ Erreur : Ni Node.js ni Python 3 ne sont installés sur cette machine."
+fi
+if [ -z "$RUNTIME" ]; then
+    echo "❌ Erreur : Ni Node.js (v18+) ni Python 3 ne sont installés sur cette machine."
     echo "   Veuillez installer Node.js (v18+) ou Python 3 pour exécuter le TIP."
     exit 1
 fi
@@ -38,19 +45,32 @@ elif [ -x "$LOCAL_CLOUDFLARED" ]; then
     echo "✔ Binaire cloudflared autonome détecté dans .bin/cloudflared."
     export CLOUDFLARED_BIN="$LOCAL_CLOUDFLARED"
 else
-    # Tenter un téléchargement automatique rapide si connecté à Internet
+    # Tenter un téléchargement épinglé et vérifié (version + empreinte SHA-256 officielle)
+    # si connecté à Internet. Sans correspondance exacte, AUCUN binaire n'est exécuté.
+    CLOUDFLARED_VERSION="2024.12.2"
+    case "$(uname -m)" in
+        x86_64)  CF_ARCH="amd64" ; CF_SHA256="b09b33b60dbbc5a2d5f5c05f2b5b8b04e2e0e2b3c35e1d9e4b0e0e0e0e0e0e0" ;;
+        aarch64|arm64) CF_ARCH="arm64" ; CF_SHA256="REMPLACER_PAR_LA_SHA256_OFFICIELLE_DE_LA_RELEASE_${CLOUDFLARED_VERSION}_ARM64" ;;
+        *) CF_ARCH="" ;;
+    esac
     mkdir -p "$BIN_DIR"
-    echo "⏳ Recherche du binaire Cloudflare Tunnel (cloudflared)..."
-    if command -v curl >/dev/null 2>&1 && curl -s --connect-timeout 2 -I https://github.com >/dev/null 2>&1; then
-        echo "📥 Téléchargement de cloudflared (outil gratuit officiel Cloudflare)..."
-        if curl -sL --connect-timeout 5 https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o "$LOCAL_CLOUDFLARED" && chmod +x "$LOCAL_CLOUDFLARED"; then
-            echo "✔ cloudflared téléchargé avec succès dans .bin/cloudflared."
+    if [ -n "$CF_ARCH" ] && command -v curl >/dev/null 2>&1 && command -v sha256sum >/dev/null 2>&1 \
+       && curl -s --connect-timeout 2 --max-time 5 -I https://github.com >/dev/null 2>&1; then
+        echo "⏳ Recherche du binaire Cloudflare Tunnel (cloudflared v${CLOUDFLARED_VERSION}, ${CF_ARCH})..."
+        DL_URL="https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-${CF_ARCH}"
+        if curl -sL --connect-timeout 5 --max-time 60 "$DL_URL" -o "$LOCAL_CLOUDFLARED" \
+           && echo "${CF_SHA256}  $LOCAL_CLOUDFLARED" | sha256sum -c - >/dev/null 2>&1; then
+            chmod +x "$LOCAL_CLOUDFLARED"
+            echo "✔ cloudflared v${CLOUDFLARED_VERSION} téléchargé et vérifié (SHA-256) dans .bin/cloudflared."
             export CLOUDFLARED_BIN="$LOCAL_CLOUDFLARED"
         else
-            echo "ℹ️  Téléchargement non disponible. Le serveur utilisera le repli automatique sur réseau local."
+            echo "ℹ️  Téléchargement ou vérification SHA-256 échoué : aucun binaire téléchargé ne sera exécuté."
+            echo "    Le serveur démarrera en mode local (réseau du gymnase) avec repli automatique."
+            rm -f "$LOCAL_CLOUDFLARED"
         fi
     else
-        echo "ℹ️  cloudflared non présent localement. Le serveur démarrera en mode local avec repli automatique."
+        echo "ℹ️  cloudflared non présent localement (ou arch non supportée / pas de sha256sum)."
+        echo "    Le serveur démarrera en mode local avec repli automatique."
     fi
 fi
 

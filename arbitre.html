@@ -336,10 +336,11 @@
     let currentMatchId = "match_1";
 
     // Récupérer l'ID depuis l'URL si fourni (ex: arbitre.html?match=match_2)
+    // ⚠️ validation stricte : l'ID repart ensuite dans innerHTML et dans l'URL
     try {
       const urlParams = new URLSearchParams(window.location.search);
       const mParam = urlParams.get("match");
-      if (mParam) currentMatchId = mParam;
+      if (mParam && /^match_[A-Za-z0-9_-]{1,64}$/.test(mParam)) currentMatchId = mParam;
     } catch (e) {}
 
     // Remplir les sélecteurs de durée (0 à 60 minutes, 0 à 59 secondes)
@@ -368,7 +369,7 @@
       if (!selA || !selB) return;
 
       const optsHtml = FILIERES.map(f => {
-        return `<option value="${f.id}" data-color="${f.hex}">${f.name} (${f.colorName})</option>`;
+        return `<option value="${escapeHtml(f.id)}" data-color="${f.hex}">${escapeHtml(f.name)} (${escapeHtml(f.colorName)})</option>`;
       }).join("");
 
       selA.innerHTML = optsHtml;
@@ -407,7 +408,7 @@
         state.liveMatches[currentMatchId] = {
           id: currentMatchId,
           active: false,
-          title: "MATCH " + currentMatchId.replace("match_", ""),
+          title: "MATCH " + String(currentMatchId).replace("match_", "").replace(/[^A-Za-z0-9 _-]/g, ""),
           teamAName: "Info",
           teamAColor: "#22c55e",
           teamAFiliereId: "info",
@@ -450,14 +451,21 @@
       const select = document.getElementById("ref-match-id-select");
       if (!select) return;
 
+      const escapeHtml = (s) => {
+        const div = document.createElement("div");
+        div.textContent = String(s ?? "");
+        return div.innerHTML;
+      };
       const matches = Object.values(state.liveMatches || {});
       select.innerHTML = matches.map(m => {
+        const safeId = escapeHtml(m.id);
         const star = m.active ? " 📺 (PROJETÉ)" : "";
-        return `<option value="${m.id}" ${m.id === currentMatchId ? "selected" : ""}>Match ${m.id.replace("match_", "")}: ${m.title || "Match"}${star}</option>`;
+        return `<option value="${safeId}" ${m.id === currentMatchId ? "selected" : ""}>Match ${escapeHtml(String(m.id).replace("match_", ""))}: ${escapeHtml(m.title || "Match")}${star}</option>`;
       }).join("");
     }
 
     function switchCurrentMatch(matchId) {
+      if (!/^match_[A-Za-z0-9_-]{1,64}$/.test(String(matchId))) return;
       currentMatchId = matchId;
       try {
         const url = new URL(window.location);
@@ -574,7 +582,7 @@
           projBtn.style.cursor = "not-allowed";
           projBtn.disabled = true;
           projBtn.title = `Déjà occupé par "${otherProjectedMatch.title || otherProjectedMatch.id}". Cet autre match doit d'abord être retiré.`;
-          projBtn.innerHTML = `🔒 Écran Occupé (${otherProjectedMatch.id.replace("match_", "M")})`;
+          projBtn.innerHTML = `🔒 Écran Occupé (${escapeHtml(String(otherProjectedMatch.id).replace("match_", "M"))})`;
         } else {
           // Libre : peut être projeté
           projBtn.className = "btn btn-warning btn-sm";

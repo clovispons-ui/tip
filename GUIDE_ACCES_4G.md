@@ -105,7 +105,7 @@ Le rapport affiche des voyants verts pour certifier :
 
 ### Étape 5 : Administration du Tournoi
 1. Sur l'écran du PC organisateur, ouvrez : **`http://localhost:8080/admin.html`**
-2. Entrez le mot de passe administrateur (par défaut : `admin123`).
+2. Entrez le mot de passe administrateur (par défaut : `BDSBDEBAR` — à remplacer impérativement via la variable d'environnement `ADMIN_PASSWORD` au lancement du serveur).
 3. Observez l'indicateur **`4G : En ligne`** dans la barre supérieure.
 4. Vous pouvez gérer les poules, saisir les scores des matchs et déclencher des alertes **Flash Info** sonores et visuelles qui retentiront instantanément sur les smartphones des capitaines.
 
