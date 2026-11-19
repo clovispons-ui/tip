@@ -1,4 +1,2 @@
-- Add animation when a team take over another one in "vidéo projecteur" page
-- Display of Admin
-- Humanize the website
-- Reduce the delay of actualisation
+- Reduce sync delay (Investigate the 409-stale, debounce, and SEE/polling so the projector updates as fast as possible and dropped saves are visible.)
+- Fix docs and test scripts (Align README/GUIDE with package.json, or add the missing test readiness scripts they describe)
