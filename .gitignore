@@ -12,3 +12,6 @@ __pycache__/
 .DS_Store
 opencode.jsonc
 .tip-server.pid
+.agents
+.opencode
+skills-lock.json
