@@ -9,6 +9,12 @@
 #   ./start.sh restart                                -> redémarre
 #   ./start.sh status                                 -> état du serveur
 #   ./start.sh --no-tunnel                            -> démarre sans tunnel 4G
+#
+# Variables d'environnement (transmises au serveur) :
+#   ADMIN_PASSWORD       Mot de passe administrateur (écritures complètes)
+#   REFEREE_PASSWORD     Mot de passe arbitre (matchs en direct uniquement)
+# Exemple :
+#   ADMIN_PASSWORD=... REFEREE_PASSWORD=... ./start.sh
 # ==============================================================================
 
 set -e

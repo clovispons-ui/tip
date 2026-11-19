@@ -109,6 +109,12 @@ Le rapport affiche des voyants verts pour certifier :
 3. Observez l'indicateur **`4G : En ligne`** dans la barre supérieure.
 4. Vous pouvez gérer les poules, saisir les scores des matchs et déclencher des alertes **Flash Info** sonores et visuelles qui retentiront instantanément sur les smartphones des capitaines.
 
+### Étape 6 : Accès des Arbitres
+1. Depuis le vidéoprojecteur (`index.html`) ou l'administration, cliquez sur le bouton **"⏱️ Arbitre"** (il ouvre `arbitre.html` dans un nouvel onglet).
+2. Saisissez le **mot de passe arbitre**, défini au lancement via `REFEREE_PASSWORD=...` (ex : `ADMIN_PASSWORD=monmotdepasse REFEREE_PASSWORD=arbitre ./start.sh`). Il est distinct du mot de passe admin.
+3. L'arbitre peut saisir les scores, gérer le chronomètre et projeter un match en direct. Il ne peut en revanche **pas** modifier les poules, les phases finales ni les classements : ces écritures sont réservées au mot de passe admin.
+4. Le bouton **"🔒 Verrouiller"** de l'interface arbitre efface le jeton de l'onglet, pratique quand on passe le téléphone à un autre arbitre.
+
 ---
 
 ## 4. 🛟 Procédures de Secours (Fallbacks)

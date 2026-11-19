@@ -14,8 +14,11 @@
  *
  * Variables d'environnement :
  *   ADMIN_PASSWORD         Mot de passe admin requis pour les écritures API
- *                          (défaut : voir DEFAULT_ADMIN_PASSWORD ci-dessous,
- *                           à remplacer impérativement via cette variable)
+ *                          (défaut : mot de passe de DÉMONSTRATION, à remplacer
+ *                           impérativement via cette variable)
+ *   REFEREE_PASSWORD       Mot de passe arbitre (distinct de l'admin), autorise
+ *                          uniquement l'écriture des matchs en direct
+ *                          (/api/live-matches), jamais des poules/classements
  */
 
 const http = require('http');
@@ -47,30 +50,58 @@ const DATA_DIR = path.join(ROOT_DIR, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'tournament_state.json');
 
 // ============================================================================
-// 🔒 SÉCURITÉ : jeton d'administration requis pour TOUTE écriture (POST /api/*)
-// Le client calcule sha256(motDePasse + "_TIP_AUTH_OK") à la connexion admin
-// (voir admin.html) et l'envoie dans l'en-tête X-Admin-Token.
+// 🔒 SÉCURITÉ : deux jetons distincts, deux périmètres distincts.
+//  - Jeton ADMIN       : requis pour POST /api/state, /api/flash, /api/public-url
+//  - Jeton ARBITRE     : requis pour POST /api/live-matches (matchs en direct)
+// Les deux jetons sont dérivés de sha256(motDePasse + sel) ; le mot de passe
+// en clair n'est jamais stocké côté client ni dans le code.
 // ============================================================================
-// ⚠️ Mot de passe de DÉMONSTRATION uniquement si ADMIN_PASSWORD n'est pas défini.
-// Toujours lancer en production avec : ADMIN_PASSWORD=... node server.js
+// ⚠️ Mots de passe de DÉMONSTRATION uniquement si les variables ne sont pas définies.
+// Toujours lancer en production avec : ADMIN_PASSWORD=... REFEREE_PASSWORD=... node server.js
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'CHANGE_ME_DEMO_PASSWORD';
 const EXPECTED_ADMIN_TOKEN = crypto.createHash('sha256')
   .update(ADMIN_PASSWORD + '_TIP_AUTH_OK')
   .digest('hex');
+const REFEREE_PASSWORD = process.env.REFEREE_PASSWORD || 'CHANGE_ME_DEMO_REFEREE';
+const EXPECTED_REFEREE_TOKEN = crypto.createHash('sha256')
+  .update(REFEREE_PASSWORD + '_TIP_REFEREE_OK')
+  .digest('hex');
+const ADMIN_SALT = '_TIP_AUTH_OK';
+const REFEREE_SALT = '_TIP_REFEREE_OK';
+const ROLE_ADMIN = 'admin';
+const ROLE_REFEREE = 'referee';
 const MAX_BODY_SIZE = 2 * 1024 * 1024; // 2 Mo max par requête POST
 const MAX_SSE_CLIENTS = 200;
+const MAX_LIVE_MATCHES = 50;
+const MATCH_ID_RE = /^match_[A-Za-z0-9_-]{1,64}$/;
+const FILIERE_ID_RE = /^[A-Za-z0-9_-]{1,32}$/;
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const FLASH_LEVELS = new Set(['urgent', 'info', 'call']);
 // Rate limiting très léger sur /api/login (anti brute force basique)
+// Un compteur PAR RÔLE : une rafale ratée côté arbitre ne bloque pas l'admin.
 const LOGIN_WINDOW_MS = 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 20;
-const loginAttempts = []; // timestamps des tentatives récentes
+const loginAttemptsByRole = {
+  [ROLE_ADMIN]: [],
+  [ROLE_REFEREE]: []
+};
 
-function loginRateLimited() {
+function loginRateLimited(role) {
+  const attempts = loginAttemptsByRole[role];
+  if (!attempts) return true; // rôle inconnu : refus sans comptabiliser
   const now = Date.now();
-  while (loginAttempts.length && now - loginAttempts[0] > LOGIN_WINDOW_MS) loginAttempts.shift();
-  if (loginAttempts.length >= LOGIN_MAX_ATTEMPTS) return true;
-  loginAttempts.push(now);
+  while (attempts.length && now - attempts[0] > LOGIN_WINDOW_MS) attempts.shift();
+  if (attempts.length >= LOGIN_MAX_ATTEMPTS) return true;
+  attempts.push(now);
   return false;
+}
+
+// Rôle demandé à la connexion : absent = admin (rétrocompatibilité),
+// seuls "admin" et "referee" sont acceptés.
+function resolveLoginRole(value) {
+  if (value === undefined || value === null) return ROLE_ADMIN;
+  if (value === ROLE_ADMIN || value === ROLE_REFEREE) return value;
+  return null;
 }
 
 // Fichiers statiques autorisés (liste blanche : .git, .bin, data/, etc. ne sont JAMAIS servis)
@@ -83,12 +114,26 @@ function log(...args) {
   console.log(new Date().toISOString(), ...args);
 }
 
-function isAdminRequest(req) {
-  const token = req.headers['x-admin-token'];
-  if (!token || typeof token !== 'string') return false;
-  const a = Buffer.from(token, 'utf-8');
-  const b = Buffer.from(EXPECTED_ADMIN_TOKEN, 'utf-8');
+function tokenMatches(candidate, expected) {
+  if (!candidate || typeof candidate !== 'string') return false;
+  const a = Buffer.from(candidate, 'utf-8');
+  const b = Buffer.from(expected, 'utf-8');
   return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function isAdminRequest(req) {
+  return tokenMatches(req.headers['x-admin-token'], EXPECTED_ADMIN_TOKEN);
+}
+
+function isRefereeRequest(req) {
+  return tokenMatches(req.headers['x-referee-token'], EXPECTED_REFEREE_TOKEN);
+}
+
+// Jetons attendus par rôle (servis par POST /api/login)
+function tokenForRole(role) {
+  if (role === ROLE_REFEREE) return { token: EXPECTED_REFEREE_TOKEN, salt: REFEREE_SALT };
+  if (role === ROLE_ADMIN) return { token: EXPECTED_ADMIN_TOKEN, salt: ADMIN_SALT };
+  return null;
 }
 
 function sendJson(res, status, obj) {
@@ -176,6 +221,71 @@ function sanitizePublicUrl(val) {
   } catch (e) {
     return null;
   }
+}
+
+// ============================================================================
+// SANITISATION DES MATCHS EN DIRECT (périmètre du jeton arbitre)
+// Un arbitre ne peut écrire QUE ces champs : tout le reste est reconstruit ici
+// à partir d'une liste blanche, les champs inconnus sont jetés.
+// ============================================================================
+function clampInt(value, min, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(n)));
+}
+
+function sanitizeLiveMatch(raw, fallbackId) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const id = (typeof raw.id === 'string' && MATCH_ID_RE.test(raw.id)) ? raw.id
+    : (typeof fallbackId === 'string' && MATCH_ID_RE.test(fallbackId) ? fallbackId : null);
+  if (!id) return null;
+
+  const endsAt = Number(raw.timerEndsAt);
+  const hasEndsAt = Number.isFinite(endsAt) && endsAt > 0;
+
+  return {
+    id,
+    active: raw.active === true,
+    title: String(raw.title == null ? '' : raw.title).slice(0, 80) || 'MATCH',
+    teamAName: String(raw.teamAName == null ? '' : raw.teamAName).slice(0, 80) || 'Équipe A',
+    teamAColor: HEX_COLOR_RE.test(String(raw.teamAColor || '')) ? String(raw.teamAColor) : '#ef4444',
+    teamAFiliereId: FILIERE_ID_RE.test(String(raw.teamAFiliereId || '')) ? String(raw.teamAFiliereId) : '',
+    scoreA: clampInt(raw.scoreA, 0, 9999, 0),
+    teamBName: String(raw.teamBName == null ? '' : raw.teamBName).slice(0, 80) || 'Équipe B',
+    teamBColor: HEX_COLOR_RE.test(String(raw.teamBColor || '')) ? String(raw.teamBColor) : '#2563eb',
+    teamBFiliereId: FILIERE_ID_RE.test(String(raw.teamBFiliereId || '')) ? String(raw.teamBFiliereId) : '',
+    scoreB: clampInt(raw.scoreB, 0, 9999, 0),
+    timerMinutes: clampInt(raw.timerMinutes, 0, 180, 10),
+    timerSeconds: clampInt(raw.timerSeconds, 0, 59, 0),
+    // Un chrono "en marche" sans échéance serait impossible à afficher : on l'ignore
+    timerRunning: raw.timerRunning === true && hasEndsAt,
+    timerEndsAt: hasEndsAt ? Math.trunc(endsAt) : null,
+    timerRemainingOnPause: clampInt(raw.timerRemainingOnPause, 0, 86400, 600),
+    updatedAt: clampInt(raw.updatedAt, 0, Number.MAX_SAFE_INTEGER, Date.now())
+  };
+}
+
+function sanitizeLiveMatches(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const entries = Object.entries(raw);
+  if (entries.length === 0 || entries.length > MAX_LIVE_MATCHES) return null;
+  const result = {};
+  for (const [key, value] of entries) {
+    const clean = sanitizeLiveMatch(value, key);
+    if (!clean) return null;
+    result[clean.id] = clean;
+  }
+  return result;
+}
+
+// liveScore est un miroir du match projeté (rétrocompatibilité de l'affichage)
+function deriveLiveScore(liveMatches, previousLiveScore) {
+  const projected = Object.values(liveMatches).find(m => m.active);
+  if (projected) return { ...projected };
+  if (previousLiveScore && typeof previousLiveScore === 'object' && !Array.isArray(previousLiveScore)) {
+    return { ...previousLiveScore, active: false };
+  }
+  return { active: false };
 }
 
 // S'assurer que le dossier data existe
@@ -373,21 +483,25 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Connexion admin : le serveur vérifie le mot de passe et renvoie le jeton de session.
-  // C'est la SEULE source de vérité du mot de passe (plus de hash côté client).
+  // Connexion (admin ou arbitre) : le serveur vérifie le mot de passe et renvoie
+  // le jeton correspondant au rôle demandé. C'est la SEULE source de vérité.
   if (url.pathname === '/api/login' && req.method === 'POST') {
-    if (loginRateLimited()) {
-      sendJson(res, 429, { error: 'Trop de tentatives, réessayez dans une minute' });
-      return;
-    }
     readJsonBody(req, res, (payload) => {
+      const role = resolveLoginRole(payload ? payload.role : undefined);
+      if (!role) {
+        sendJson(res, 400, { ok: false, error: 'Rôle invalide (admin ou referee)' });
+        return;
+      }
+      if (loginRateLimited(role)) {
+        sendJson(res, 429, { error: 'Trop de tentatives, réessayez dans une minute' });
+        return;
+      }
       const password = payload && typeof payload.password === 'string' ? payload.password : '';
-      const candidate = crypto.createHash('sha256').update(password + '_TIP_AUTH_OK').digest('hex');
-      const a = Buffer.from(candidate, 'utf-8');
-      const b = Buffer.from(EXPECTED_ADMIN_TOKEN, 'utf-8');
-      if (password && a.length === b.length && crypto.timingSafeEqual(a, b)) {
-        log('🔓 Connexion admin réussie');
-        sendJson(res, 200, { ok: true, token: EXPECTED_ADMIN_TOKEN });
+      const expected = tokenForRole(role);
+      const candidate = crypto.createHash('sha256').update(password + expected.salt).digest('hex');
+      if (password && tokenMatches(candidate, expected.token)) {
+        log(role === ROLE_REFEREE ? '🔓 Connexion arbitre réussie' : '🔓 Connexion admin réussie');
+        sendJson(res, 200, { ok: true, token: expected.token, role });
       } else {
         sendJson(res, 401, { ok: false, error: 'Mot de passe incorrect' });
       }
@@ -417,6 +531,52 @@ const server = http.createServer((req, res) => {
         sendJson(res, 500, { error: "Échec d'enregistrement sur le disque" });
         return;
       }
+      broadcastEvent('STATE_UPDATE', { state });
+      sendJson(res, 200, { success: true });
+    });
+    return;
+  }
+
+  // Mise à jour des matchs en direct (arbitre OU admin) : SEUL périmètre autorisé
+  // au jeton arbitre. Le serveur relit son propre état et ne remplace que
+  // liveMatches/liveScore : poules, phases finales et classements restent intacts.
+  if (url.pathname === '/api/live-matches' && req.method === 'POST') {
+    if (!isRefereeRequest(req) && !isAdminRequest(req)) {
+      sendJson(res, 401, { error: 'Non autorisé' });
+      return;
+    }
+    readJsonBody(req, res, (payload) => {
+      const liveMatches = sanitizeLiveMatches(payload && payload.liveMatches);
+      if (!liveMatches) {
+        sendJson(res, 400, { error: 'liveMatches invalide (format ou nombre de matchs)' });
+        return;
+      }
+      let state = null;
+      try {
+        if (fs.existsSync(STATE_FILE)) {
+          state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+        }
+      } catch (e) {
+        log('❌ Lecture état impossible pour fusion matchs :', e.message);
+      }
+      if (!state || typeof state !== 'object' || Array.isArray(state)) {
+        sendJson(res, 409, { error: "Aucun état de tournoi à mettre à jour" });
+        return;
+      }
+
+      state.liveMatches = liveMatches;
+      state.liveScore = deriveLiveScore(liveMatches, state.liveScore);
+      state.lastUpdated = new Date().toISOString();
+
+      try {
+        writeStateFile(state);
+      } catch (e) {
+        log('❌ Échec écriture état (matchs en direct) :', e.message);
+        sendJson(res, 500, { error: "Échec d'enregistrement sur le disque" });
+        return;
+      }
+      // Protège le score saisi par l'arbitre d'un enregistrement admin déjà en vol
+      lastSavedStateUpdated = state.lastUpdated;
       broadcastEvent('STATE_UPDATE', { state });
       sendJson(res, 200, { success: true });
     });
@@ -674,6 +834,10 @@ server.listen(PORT, '0.0.0.0', () => {
   if (!process.env.ADMIN_PASSWORD) {
     console.log(`\n⚠️  ADMIN_PASSWORD non défini : un mot de passe de DÉMONSTRATION est utilisé. Définissez ADMIN_PASSWORD=... au lancement.`);
     console.log(`   Pour sécuriser l'accès API (recommandé) : ADMIN_PASSWORD= votremotdepasse node server.js`);
+  }
+  if (!process.env.REFEREE_PASSWORD) {
+    console.log(`⚠️  REFEREE_PASSWORD non défini : un mot de passe arbitre de DÉMONSTRATION est utilisé.`);
+    console.log(`   Pour sécuriser l'accès arbitre (recommandé) : REFEREE_PASSWORD=votremotdepasse node server.js`);
   }
   console.log('===============================================================\n');
 

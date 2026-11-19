@@ -5,13 +5,14 @@
    ========================================================================== */
 
 // ============================================================================
-// 🔒 SÉCURITÉ & AUTHENTIFICATION ADMIN
-// Le mot de passe est vérifié UNIQUEMENT par le serveur (POST /api/login),
-// qui renvoie le jeton de session X-Admin-Token exigé pour toute écriture API.
-// Aucun hash de mot de passe n'est jamais stocké ni calculé côté client.
-// Le mot de passe se définit au lancement : ADMIN_PASSWORD=... ./start.sh
+// 🔒 SÉCURITÉ & AUTHENTIFICATION
+// Deux rôles, deux jetons séparés (stockés dans sessionStorage, propres à l'onglet) :
+//  - admin   : accès complet (poules, phases finales, scores, flash info)
+//  - referee : accès limité aux matchs en direct (/api/live-matches)
+// Les mots de passe sont vérifiés uniquement par le serveur (POST /api/login).
 // ============================================================================
 const ADMIN_TOKEN_STORAGE_KEY = "ADMIN_AUTH_TOKEN";
+const REFEREE_TOKEN_STORAGE_KEY = "REFEREE_AUTH_TOKEN";
 
 // Fonction autonome de hachage SHA-256 (standard universel, compatible tout navigateur)
 function sha256(ascii) {
@@ -71,26 +72,40 @@ function sha256(ascii) {
   return result;
 }
 
-// Connexion admin côté serveur : renvoie une Promise résolue avec le jeton de session.
-function loginAdmin(password) {
+// Connexion côté serveur : renvoie une Promise résolue avec le jeton du rôle demandé.
+// role = "admin" (défaut) ou "referee".
+function loginAs(role, password) {
   return fetch("/api/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password })
+    body: JSON.stringify({ password, role })
   })
     .then(res => res.json().then(data => ({ status: res.status, data })))
     .then(({ status, data }) => {
       if (status === 200 && data && data.ok && data.token) {
-        try { sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, data.token); } catch (e) {}
-        return { success: true, token: data.token };
+        const key = data.role === "referee" ? REFEREE_TOKEN_STORAGE_KEY : ADMIN_TOKEN_STORAGE_KEY;
+        try { sessionStorage.setItem(key, data.token); } catch (e) {}
+        return { success: true, token: data.token, role: data.role || role };
       }
       return { success: false, message: (data && data.error) || "Mot de passe incorrect" };
     })
     .catch(() => ({ success: false, message: "Serveur injoignable — lancez ./start.sh" }));
 }
 
+function loginAdmin(password) {
+  return loginAs("admin", password);
+}
+
+function loginReferee(password) {
+  return loginAs("referee", password);
+}
+
 function getAdminToken() {
   try { return sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || ""; } catch (e) { return ""; }
+}
+
+function getRefereeToken() {
+  try { return sessionStorage.getItem(REFEREE_TOKEN_STORAGE_KEY) || ""; } catch (e) { return ""; }
 }
 
 // Le mot de passe se change au niveau du serveur (variable ADMIN_PASSWORD au lancement)
@@ -619,6 +634,12 @@ function adminApiHeaders() {
   return { "Content-Type": "application/json", "X-Admin-Token": token };
 }
 
+// En-têtes des écritures arbitre : jeton distinct, périmètre distinct
+function refereeApiHeaders() {
+  const token = getRefereeToken();
+  return { "Content-Type": "application/json", "X-Referee-Token": token };
+}
+
 function executeServerSave() {
   if (isSavingToServer || !pendingStateToSave) return;
   const stateToSend = pendingStateToSave;
@@ -637,6 +658,55 @@ function executeServerSave() {
     // Si d'autres modifications ont eu lieu pendant la requête, envoyer la version la plus fraîche
     if (pendingStateToSave) {
       setTimeout(executeServerSave, 50);
+    }
+  });
+}
+
+// ============================================================================
+// ÉCRITURE ARBITRE (matchs en direct uniquement)
+// Le serveur ne remplace que liveMatches/liveScore : un arbitre ne peut pas
+// modifier les poules, les phases finales ni les classements.
+// ============================================================================
+let saveLiveStateDebounceTimer = null;
+let pendingLiveMatchesToSave = null;
+let isSavingLiveState = false;
+
+function saveLiveState(state) {
+  state.lastUpdated = new Date().toISOString();
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    console.error("Erreur saveLiveState localStorage:", e);
+  }
+
+  if (typeof fetch !== "function" || typeof window === "undefined" || !window.location.protocol.startsWith("http")) {
+    return;
+  }
+
+  pendingLiveMatchesToSave = state.liveMatches || {};
+  if (saveLiveStateDebounceTimer) {
+    clearTimeout(saveLiveStateDebounceTimer);
+  }
+  saveLiveStateDebounceTimer = setTimeout(executeLiveStateSave, 120);
+}
+
+function executeLiveStateSave() {
+  if (isSavingLiveState || !pendingLiveMatchesToSave) return;
+  const liveMatches = pendingLiveMatchesToSave;
+  pendingLiveMatchesToSave = null;
+  isSavingLiveState = true;
+
+  fetch("/api/live-matches", {
+    method: "POST",
+    headers: refereeApiHeaders(),
+    body: JSON.stringify({ liveMatches })
+  })
+  .then(() => {})
+  .catch(() => {})
+  .finally(() => {
+    isSavingLiveState = false;
+    if (pendingLiveMatchesToSave) {
+      setTimeout(executeLiveStateSave, 50);
     }
   });
 }

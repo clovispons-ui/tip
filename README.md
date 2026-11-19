@@ -27,6 +27,12 @@ Cette application web autonome (HTML5 / CSS3 / Vanilla JavaScript) permet d'orga
     - Tableau des points et stades atteints par équipe (la colonne statut inutile a été retirée).
     - Bouton **"📥 Télécharger le planning (.xls)"** pour exporter le fichier Excel.
 
+- **`arbitre.html`** : **Interface Arbitre (téléphone)**
+  - Protégée par le **mot de passe arbitre** (`REFEREE_PASSWORD`), distinct du mot de passe admin.
+  - Accessible depuis le bouton **"⏱️ Arbitre"** de `index.html` (et depuis `admin.html`).
+  - Score +1 / -1, choix des filières, chronomètre et projection plein écran d'un match en direct.
+  - Ne peut écrire que les matchs en direct : poules, phases finales et classements restent hors de portée.
+
 - **`app.js`** : **Moteur logique, barème et synchronisation**
   - Données officielles des 8 filières et leurs couleurs (Télécom, Info, Matméca, SEE, R&I, Elec, Ekip Bar, Admin).
   - **Nouveau barème des points officiel du tournoi** :
@@ -53,20 +59,20 @@ Cette application web autonome (HTML5 / CSS3 / Vanilla JavaScript) permet d'orga
 ## 🚀 Comment lancer l'application ?
 
 1. Décompressez l'archive **`tournoi_interfilieres.zip`**.
-2. Lancez le serveur avec votre mot de passe admin : `ADMIN_PASSWORD=votremotdepasse ./start.sh`, puis ouvrez **`admin.html`** dans votre navigateur et saisissez ce même mot de passe (vérifié côté serveur via `POST /api/login`). Sans `ADMIN_PASSWORD`, un mot de passe de démonstration est utilisé et un avertissement s'affiche au démarrage.
+2. Lancez le serveur avec vos deux mots de passe : `ADMIN_PASSWORD=votremotdepasse REFEREE_PASSWORD=motdepassearbitre ./start.sh`, puis ouvrez **`admin.html`** et saisissez le mot de passe admin (vérifié côté serveur via `POST /api/login`). Sans ces variables, des mots de passe de démonstration sont utilisés et un avertissement s'affiche au démarrage.
 3. Ouvrez **`index.html`** dans un second onglet ou déplacez-le sur votre second écran relié au vidéoprojecteur, puis appuyez sur **F11** pour passer en plein écran.
-4. Dès que vous saisissez un score, assignez un arbitre ou cliquez sur un bouton dans `admin.html`, l'affichage `index.html` se met à jour instantanément sans recharger la page !
+4. Les arbitres ouvrent l'interface depuis le bouton **"⏱️ Arbitre"** de `index.html` (ou depuis `admin.html`) et saisissent le **mot de passe arbitre**, distinct du mot de passe admin. Il ne leur donne accès qu'aux matchs en direct, jamais aux poules, phases finales ou classements.
+5. Dès que vous saisissez un score, assignez un arbitre ou cliquez sur un bouton dans `admin.html`, l'affichage `index.html` se met à jour instantanément sans recharger la page !
 
 ---
 
-## 🔒 Sécurité du mot de passe Administrateur
+## 🔒 Sécurité des mots de passe
 
-Le mot de passe **n'est plus stocké en clair** dans le code source :
-- Il est protégé par une empreinte cryptographique **SHA-256**.
-- Même en ouvrant `app.js` ou en inspectant le code du navigateur (`F12`), il est impossible de lire le mot de passe en clair.
-- Pour changer le mot de passe :
-  - **Méthode 1 (Directe)** : Cliquez sur le bouton **"🔑 Mot de passe"** en haut à droite de `admin.html`.
-  - **Méthode 2 (Dans app.js)** : Remplacez la constante `DEFAULT_ADMIN_PASSWORD_HASH` par l'empreinte SHA-256 de votre choix.
+Les mots de passe **ne sont pas stockés en clair** dans le code source. Ils sont fournis au lancement du serveur et vérifiés uniquement côté serveur (`POST /api/login`) :
+- **Mot de passe admin** : défini via `ADMIN_PASSWORD`. Il autorise toutes les écritures (poules, phases finales, scores, flash info).
+- **Mot de passe arbitre** : défini via `REFEREE_PASSWORD`. Il autorise uniquement l'écriture des matchs en direct (`POST /api/live-matches`). Un arbitre ne peut pas modifier les poules, les phases finales ni les classements, même via les outils de développement du navigateur.
+- Les deux jetons de session sont distincts et stockés dans le `sessionStorage` de chaque onglet : se connecter en arbitre ne donne jamais les droits admin, et inversement.
+- Les mots de passe restent modifiables à tout moment en relançant le serveur avec de nouvelles variables d'environnement.
 
 ---
 

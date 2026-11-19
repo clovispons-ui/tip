@@ -229,6 +229,20 @@
 </head>
 <body>
 
+  <!-- ÉCRAN DE CONNEXION ARBITRE (mot de passe distinct de l'admin) -->
+  <div id="ref-login-modal" class="login-overlay">
+    <div class="login-box">
+      <div style="font-size: 3rem; margin-bottom: 0.5rem;">🔒</div>
+      <h2>Accès Arbitre - TIP</h2>
+      <p>Veuillez saisir le mot de passe arbitre</p>
+      <form onsubmit="handleRefereeLogin(event)" style="display:flex; flex-direction:column; gap:0.85rem;">
+        <input type="password" id="ref-pwd-input" placeholder="Mot de passe..." required autofocus />
+        <div id="ref-login-error" style="color:var(--accent-danger); font-size:0.85rem; display:none;">Mot de passe incorrect.</div>
+        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:0.75rem;">Déverrouiller l'interface Arbitre</button>
+      </form>
+    </div>
+  </div>
+
   <!-- EN-TÊTE ARBITRE AVEC CHOIX DU MATCH & BOUTON PROJECTION -->
   <header class="ref-header">
     <div class="ref-header-left">
@@ -237,9 +251,12 @@
         <!-- Options injectées en JS : Match 1, Match 2, Match 3, Match 4 -->
       </select>
     </div>
-    <div class="ref-proj-toggle">
+    <div class="ref-proj-toggle" style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
       <button id="ref-proj-btn" class="btn btn-sm" onclick="toggleProjection()" style="font-weight: 800; font-size: 0.82rem; padding: 0.4rem 0.75rem;">
         📺 Projeter Plein Écran
+      </button>
+      <button id="ref-logout-btn" class="btn btn-sm" onclick="lockRefereeView()" title="Verrouiller l'interface arbitre" style="font-weight: 800; font-size: 0.82rem; padding: 0.4rem 0.75rem;">
+        🔒 Verrouiller
       </button>
     </div>
   </header>
@@ -342,6 +359,57 @@
       const mParam = urlParams.get("match");
       if (mParam && /^match_[A-Za-z0-9_-]{1,64}$/.test(mParam)) currentMatchId = mParam;
     } catch (e) {}
+
+    // ========================================================================
+    // 🔒 AUTHENTIFICATION ARBITRE
+    // Le mot de passe arbitre est vérifié par le serveur (POST /api/login,
+    // role "referee"). Le jeton obtenu ne permet QUE d'écrire les matchs en
+    // direct : il est distinct du jeton admin et propre à cet onglet.
+    // ========================================================================
+    let refereeAuthenticated = false;
+    let refereeSyncStarted = false;
+
+    function handleRefereeLogin(e) {
+      e.preventDefault();
+      const input = document.getElementById("ref-pwd-input");
+      const errEl = document.getElementById("ref-login-error");
+      const val = input ? input.value : "";
+      if (errEl) errEl.style.display = "none";
+      loginReferee(val).then(res => {
+        if (res.success) {
+          if (input) input.value = "";
+          unlockRefereeView();
+        } else if (errEl) {
+          errEl.textContent = res.message || "Mot de passe incorrect.";
+          errEl.style.display = "block";
+        }
+      });
+    }
+
+    function unlockRefereeView() {
+      refereeAuthenticated = true;
+      const modal = document.getElementById("ref-login-modal");
+      if (modal) modal.classList.add("hidden");
+      renderRefereeView();
+      if (!refereeSyncStarted) {
+        refereeSyncStarted = true;
+        initServerSync(() => {
+          if (refereeAuthenticated) renderRefereeView();
+        });
+      }
+    }
+
+    function lockRefereeView() {
+      try { sessionStorage.removeItem("REFEREE_AUTH_TOKEN"); } catch (e) {}
+      refereeAuthenticated = false;
+      const modal = document.getElementById("ref-login-modal");
+      if (modal) modal.classList.remove("hidden");
+      const input = document.getElementById("ref-pwd-input");
+      if (input) {
+        input.value = "";
+        setTimeout(() => input.focus(), 50);
+      }
+    }
 
     // Remplir les sélecteurs de durée (0 à 60 minutes, 0 à 59 secondes)
     function populateWheelSelects() {
@@ -499,7 +567,7 @@
         timerRemainingOnPause: 600,
         updatedAt: Date.now()
       };
-      saveState(state);
+      saveLiveState(state);
       switchCurrentMatch(newId);
     }
 
@@ -643,7 +711,7 @@
       live.updatedAt = Date.now();
 
       syncLiveScoreObject(state);
-      saveState(state);
+      saveLiveState(state);
       renderRefereeView();
     }
 
@@ -669,7 +737,7 @@
 
       live.updatedAt = Date.now();
       syncLiveScoreObject(state);
-      saveState(state);
+      saveLiveState(state);
       renderRefereeView();
     }
 
@@ -687,7 +755,7 @@
 
       live.updatedAt = Date.now();
       syncLiveScoreObject(state);
-      saveState(state);
+      saveLiveState(state);
       renderRefereeView();
     }
 
@@ -703,7 +771,7 @@
 
       live.updatedAt = Date.now();
       syncLiveScoreObject(state);
-      saveState(state);
+      saveLiveState(state);
       renderRefereeView();
     }
 
@@ -715,7 +783,7 @@
         live.scoreB = 0;
         live.updatedAt = Date.now();
         syncLiveScoreObject(state);
-        saveState(state);
+        saveLiveState(state);
         renderRefereeView();
       }
     }
@@ -740,7 +808,7 @@
 
       live.updatedAt = Date.now();
       syncLiveScoreObject(state);
-      saveState(state);
+      saveLiveState(state);
       renderRefereeView();
     }
 
@@ -753,7 +821,7 @@
       live.timerRemainingOnPause = totalInitSec || 600;
       live.updatedAt = Date.now();
       syncLiveScoreObject(state);
-      saveState(state);
+      saveLiveState(state);
       renderRefereeView();
     }
 
@@ -777,12 +845,13 @@
 
       live.updatedAt = Date.now();
       syncLiveScoreObject(state);
-      saveState(state);
+      saveLiveState(state);
       renderRefereeView();
     }
 
     // Boucle de décompte du chrono et alarme de fin de match
     setInterval(() => {
+      if (!refereeAuthenticated) return;
       const state = loadState();
       if (!state.liveMatches) return;
       const live = state.liveMatches[currentMatchId];
@@ -794,7 +863,7 @@
           live.timerRemainingOnPause = 0;
           live.updatedAt = Date.now();
           syncLiveScoreObject(state);
-          saveState(state);
+          saveLiveState(state);
           renderRefereeView();
           if (typeof playMatchEndBuzzer === "function") {
             playMatchEndBuzzer();
@@ -807,14 +876,22 @@
     document.addEventListener("DOMContentLoaded", () => {
       populateWheelSelects();
       populateFiliereSelects();
-      renderRefereeView();
-      initServerSync();
+
+      // Accès protégé : sans jeton arbitre valide, on n'affiche que l'écran de connexion
+      if (getRefereeToken()) {
+        unlockRefereeView();
+      } else {
+        const modal = document.getElementById("ref-login-modal");
+        if (modal) modal.classList.remove("hidden");
+        const input = document.getElementById("ref-pwd-input");
+        if (input) setTimeout(() => input.focus(), 50);
+      }
 
       window.addEventListener("storage", () => {
-        renderRefereeView();
+        if (refereeAuthenticated) renderRefereeView();
       });
       window.addEventListener("tip:state_updated", () => {
-        renderRefereeView();
+        if (refereeAuthenticated) renderRefereeView();
       });
     });
   </script>

@@ -16,12 +16,16 @@ Options CLI :
 
 Variables d'environnement :
   ADMIN_PASSWORD         Mot de passe admin requis pour les écritures API
-                         (défaut : voir DEFAULT_ADMIN_PASSWORD ci-dessous)
+                         (défaut : mot de passe de DÉMONSTRATION, à remplacer)
+  REFEREE_PASSWORD       Mot de passe arbitre (distinct de l'admin), autorise
+                         uniquement l'écriture des matchs en direct
+                         (/api/live-matches), jamais des poules/classements
 """
 
 import os
 import sys
 import json
+import re
 import socket
 import mimetypes
 import hashlib
@@ -63,30 +67,54 @@ DATA_DIR = os.path.join(ROOT_DIR, 'data')
 STATE_FILE = os.path.join(DATA_DIR, 'tournament_state.json')
 
 # ============================================================================
-# 🔒 SÉCURITÉ : jeton d'administration requis pour TOUTE écriture (POST /api/*)
+# 🔒 SÉCURITÉ : deux jetons distincts, deux périmètres distincts.
+#  - Jeton ADMIN   : POST /api/state, /api/flash, /api/public-url
+#  - Jeton ARBITRE : POST /api/live-matches (matchs en direct uniquement)
 # ============================================================================
-# ⚠️ Mot de passe de DÉMONSTRATION uniquement si ADMIN_PASSWORD n'est pas défini.
-# Toujours lancer en production avec : ADMIN_PASSWORD=... python3 server.py
+# ⚠️ Mots de passe de DÉMONSTRATION uniquement si ADMIN_PASSWORD / REFEREE_PASSWORD
+# ne sont pas définis.
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD') or 'CHANGE_ME_DEMO_PASSWORD'
 EXPECTED_ADMIN_TOKEN = hashlib.sha256((ADMIN_PASSWORD + '_TIP_AUTH_OK').encode('utf-8')).hexdigest()
+REFEREE_PASSWORD = os.environ.get('REFEREE_PASSWORD') or 'CHANGE_ME_DEMO_REFEREE'
+EXPECTED_REFEREE_TOKEN = hashlib.sha256((REFEREE_PASSWORD + '_TIP_REFEREE_OK').encode('utf-8')).hexdigest()
+ADMIN_SALT = '_TIP_AUTH_OK'
+REFEREE_SALT = '_TIP_REFEREE_OK'
+ROLE_ADMIN = 'admin'
+ROLE_REFEREE = 'referee'
 MAX_BODY_SIZE = 2 * 1024 * 1024  # 2 Mo max par requête POST
 MAX_SSE_CLIENTS = 200
+MAX_LIVE_MATCHES = 50
+MATCH_ID_RE = re.compile(r'^match_[A-Za-z0-9_-]{1,64}$')
+FILIERE_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,32}$')
+HEX_COLOR_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
 FLASH_LEVELS = {'urgent', 'info', 'call'}
 # Rate limiting très léger sur /api/login (anti brute force basique)
+# Un compteur PAR RÔLE : une rafale ratée côté arbitre ne bloque pas l'admin.
 LOGIN_WINDOW_MS = 60 * 1000
 LOGIN_MAX_ATTEMPTS = 20
-_login_attempts = []
+_login_attempts = {ROLE_ADMIN: [], ROLE_REFEREE: []}
 _login_lock = threading.Lock()
 
-def login_rate_limited():
+def login_rate_limited(role):
+    attempts = _login_attempts.get(role)
+    if attempts is None:
+        return True  # rôle inconnu : refus sans comptabiliser
     now = time.time() * 1000
     with _login_lock:
-        while _login_attempts and now - _login_attempts[0] > LOGIN_WINDOW_MS:
-            _login_attempts.pop(0)
-        if len(_login_attempts) >= LOGIN_MAX_ATTEMPTS:
+        while attempts and now - attempts[0] > LOGIN_WINDOW_MS:
+            attempts.pop(0)
+        if len(attempts) >= LOGIN_MAX_ATTEMPTS:
             return True
-        _login_attempts.append(now)
+        attempts.append(now)
         return False
+
+def resolve_login_role(value):
+    """Rôle demandé : absent = admin (rétrocompatibilité), sinon admin/referee."""
+    if value is None:
+        return ROLE_ADMIN
+    if value in (ROLE_ADMIN, ROLE_REFEREE):
+        return value
+    return None
 
 # Fichiers statiques autorisés (liste blanche : .git, .bin, data/, etc. ne sont JAMAIS servis)
 STATIC_ALLOWLIST = {
@@ -104,9 +132,104 @@ def log(*args):
     import datetime
     print(datetime.datetime.now().isoformat(timespec='seconds'), *args, flush=True)
 
+def now_iso():
+    """Horodatage ISO 8601 UTC avec millisecondes (même format que JS toISOString)."""
+    return time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()) + f'.{int(time.time() * 1000) % 1000:03d}Z'
+
 def is_admin_request(handler):
     token = handler.headers.get('X-Admin-Token', '')
     return hmac.compare_digest(token, EXPECTED_ADMIN_TOKEN)
+
+def is_referee_request(handler):
+    token = handler.headers.get('X-Referee-Token', '')
+    return hmac.compare_digest(token, EXPECTED_REFEREE_TOKEN)
+
+def token_for_role(role):
+    if role == ROLE_REFEREE:
+        return EXPECTED_REFEREE_TOKEN, REFEREE_SALT
+    if role == ROLE_ADMIN:
+        return EXPECTED_ADMIN_TOKEN, ADMIN_SALT
+    return None
+
+def clamp_int(value, minimum, maximum, fallback):
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return max(minimum, min(maximum, n))
+
+def sanitize_live_match(raw, fallback_id=None):
+    """Reconstruit un match depuis une liste blanche de champs (aucun champ inconnu)."""
+    if not isinstance(raw, dict):
+        return None
+    match_id = raw.get('id')
+    if not (isinstance(match_id, str) and MATCH_ID_RE.match(match_id)):
+        match_id = fallback_id if isinstance(fallback_id, str) and MATCH_ID_RE.match(fallback_id) else None
+    if not match_id:
+        return None
+
+    ends_at = raw.get('timerEndsAt')
+    try:
+        ends_at = int(ends_at)
+        has_ends_at = ends_at > 0
+    except (TypeError, ValueError):
+        has_ends_at = False
+
+    def text(key, fallback, limit=80):
+        val = raw.get(key)
+        val = str(val)[:limit] if val is not None else ''
+        return val or fallback
+
+    def color(key, fallback):
+        val = raw.get(key)
+        return val if isinstance(val, str) and HEX_COLOR_RE.match(val) else fallback
+
+    def filiere(key):
+        val = raw.get(key)
+        return val if isinstance(val, str) and FILIERE_ID_RE.match(val) else ''
+
+    return {
+        'id': match_id,
+        'active': raw.get('active') is True,
+        'title': text('title', 'MATCH'),
+        'teamAName': text('teamAName', 'Équipe A'),
+        'teamAColor': color('teamAColor', '#ef4444'),
+        'teamAFiliereId': filiere('teamAFiliereId'),
+        'scoreA': clamp_int(raw.get('scoreA'), 0, 9999, 0),
+        'teamBName': text('teamBName', 'Équipe B'),
+        'teamBColor': color('teamBColor', '#2563eb'),
+        'teamBFiliereId': filiere('teamBFiliereId'),
+        'scoreB': clamp_int(raw.get('scoreB'), 0, 9999, 0),
+        'timerMinutes': clamp_int(raw.get('timerMinutes'), 0, 180, 10),
+        'timerSeconds': clamp_int(raw.get('timerSeconds'), 0, 59, 0),
+        'timerRunning': raw.get('timerRunning') is True and has_ends_at,
+        'timerEndsAt': ends_at if has_ends_at else None,
+        'timerRemainingOnPause': clamp_int(raw.get('timerRemainingOnPause'), 0, 86400, 600),
+        'updatedAt': clamp_int(raw.get('updatedAt'), 0, 2**53 - 1, int(time.time() * 1000)),
+    }
+
+def sanitize_live_matches(raw):
+    if not isinstance(raw, dict):
+        return None
+    if len(raw) == 0 or len(raw) > MAX_LIVE_MATCHES:
+        return None
+    result = {}
+    for key, value in raw.items():
+        clean = sanitize_live_match(value, key)
+        if clean is None:
+            return None
+        result[clean['id']] = clean
+    return result
+
+def derive_live_score(live_matches, previous_live_score):
+    for match in live_matches.values():
+        if match.get('active'):
+            return dict(match)
+    if isinstance(previous_live_score, dict):
+        copy = dict(previous_live_score)
+        copy['active'] = False
+        return copy
+    return {'active': False}
 
 def send_json(handler, status, obj):
     # Si les en-têtes sont déjà expédiés (double appel, client parti), ne rien faire
@@ -442,10 +565,41 @@ class TIPRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
-        # Connexion admin : le serveur vérifie le mot de passe et renvoie le jeton de session.
+        # Connexion (admin ou arbitre) : le serveur vérifie le mot de passe et renvoie
+        # le jeton correspondant au rôle demandé.
         if path == '/api/login':
-            if login_rate_limited():
+            body = self.read_body()
+            if body is None:
+                send_json(self, 413, {"error": "Payload trop volumineux ou illisible (max 2 Mo)"})
+                return
+            try:
+                payload = json.loads(body)
+            except Exception:
+                send_json(self, 400, {"error": "Format JSON invalide"})
+                return
+            role = resolve_login_role(payload.get('role') if isinstance(payload, dict) else None)
+            if role is None:
+                send_json(self, 400, {"ok": False, "error": "Rôle invalide (admin ou referee)"})
+                return
+            if login_rate_limited(role):
                 send_json(self, 429, {"error": "Trop de tentatives, réessayez dans une minute"})
+                return
+            password = payload.get('password') if isinstance(payload, dict) else None
+            password = password if isinstance(password, str) else ''
+            expected_token, salt = token_for_role(role)
+            candidate = hashlib.sha256((password + salt).encode('utf-8')).hexdigest()
+            if password and hmac.compare_digest(candidate, expected_token):
+                log("🔓 Connexion arbitre réussie" if role == ROLE_REFEREE else "🔓 Connexion admin réussie")
+                send_json(self, 200, {"ok": True, "token": expected_token, "role": role})
+            else:
+                send_json(self, 401, {"ok": False, "error": "Mot de passe incorrect"})
+            return
+
+        # Mise à jour des matchs en direct (arbitre OU admin) : SEUL périmètre du
+        # jeton arbitre. Seuls liveMatches/liveScore sont remplacés.
+        if path == '/api/live-matches':
+            if not (is_referee_request(self) or is_admin_request(self)):
+                send_json(self, 401, {"error": "Non autorisé"})
                 return
             body = self.read_body()
             if body is None:
@@ -456,14 +610,36 @@ class TIPRequestHandler(BaseHTTPRequestHandler):
             except Exception:
                 send_json(self, 400, {"error": "Format JSON invalide"})
                 return
-            password = payload.get('password') if isinstance(payload, dict) else None
-            password = password if isinstance(password, str) else ''
-            candidate = hashlib.sha256((password + '_TIP_AUTH_OK').encode('utf-8')).hexdigest()
-            if password and hmac.compare_digest(candidate, EXPECTED_ADMIN_TOKEN):
-                log("🔓 Connexion admin réussie")
-                send_json(self, 200, {"ok": True, "token": EXPECTED_ADMIN_TOKEN})
-            else:
-                send_json(self, 401, {"ok": False, "error": "Mot de passe incorrect"})
+            live_matches = sanitize_live_matches(payload.get('liveMatches') if isinstance(payload, dict) else None)
+            if live_matches is None:
+                send_json(self, 400, {"error": "liveMatches invalide (format ou nombre de matchs)"})
+                return
+            with state_lock:
+                if not os.path.exists(STATE_FILE):
+                    send_json(self, 409, {"error": "Aucun état de tournoi à mettre à jour"})
+                    return
+                try:
+                    state = load_state_file()
+                except Exception as e:
+                    log(f"❌ Lecture état impossible pour fusion matchs : {e}")
+                    send_json(self, 500, {"error": "Lecture de l'état impossible"})
+                    return
+                if not isinstance(state, dict):
+                    send_json(self, 409, {"error": "Aucun état de tournoi à mettre à jour"})
+                    return
+                state['liveMatches'] = live_matches
+                state['liveScore'] = derive_live_score(live_matches, state.get('liveScore'))
+                state['lastUpdated'] = now_iso()
+                try:
+                    write_state_file(state)
+                except Exception as e:
+                    log(f"❌ Échec écriture état (matchs en direct) : {e}")
+                    send_json(self, 500, {"error": "Échec d'enregistrement sur le disque"})
+                    return
+                # Protège le score de l'arbitre d'un enregistrement admin déjà en vol
+                last_saved_state_updated = state['lastUpdated']
+            broadcast_event('STATE_UPDATE', {'state': state})
+            send_json(self, 200, {"success": True})
             return
 
         # Toute autre écriture nécessite le jeton admin
@@ -584,6 +760,9 @@ def main():
     if not os.environ.get('ADMIN_PASSWORD'):
         print("\n⚠️  ADMIN_PASSWORD non défini : un mot de passe de DÉMONSTRATION est utilisé. Définissez ADMIN_PASSWORD=... au lancement.")
         print("   Pour sécuriser l'accès API (recommandé) : ADMIN_PASSWORD=votremotdepasse python3 server.py")
+    if not os.environ.get('REFEREE_PASSWORD'):
+        print("⚠️  REFEREE_PASSWORD non défini : un mot de passe arbitre de DÉMONSTRATION est utilisé.")
+        print("   Pour sécuriser l'accès arbitre (recommandé) : REFEREE_PASSWORD=votremotdepasse python3 server.py")
     print("===============================================================\n")
     try:
         httpd.serve_forever()
