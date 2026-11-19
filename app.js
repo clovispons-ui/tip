@@ -371,7 +371,8 @@ function createInitialState() {
         updatedAt: Date.now()
       }
     },
-    sports: sports
+    sports: sports,
+    scoreHistory: []
   };
 }
 
@@ -565,6 +566,11 @@ function loadState() {
     // 6. Nettoyage automatique des phases finales retiré du chargement :
     // il supprimait silencieusement des matchs déjà joués (avec scores) à chaque loadState.
     // Le nettoyage n'a lieu que lors d'un changement explicite de nombre de qualifiés (admin).
+
+    if (!Array.isArray(state.scoreHistory)) {
+      state.scoreHistory = [];
+      needsSave = true;
+    }
 
     if (needsSave) {
       try {
@@ -2009,6 +2015,35 @@ function computeGlobalFiliereStandings(state) {
   return Object.values(standings).sort((a, b) => b.totalPoints - a.totalPoints);
 }
 
+function getScoreHistoryBucket(timestampMs) {
+  const interval = 15 * 60 * 1000;
+  return new Date(Math.floor(timestampMs / interval) * interval).toISOString();
+}
+
+function captureAdminScoreSnapshot(state, timestampMs) {
+  if (!state || !state.sports) return false;
+  if (!Array.isArray (state.scoreHistory)) state.scoreHistory = [];
+
+  const bucket = getScoreHistoryBucket(timestampMs || Date.now());
+  const standings = computeGlobalFiliereStandings(state);
+  const totals = {};
+  standings.forEach(filiere => {
+    totals[filiere.id] = filiere.totalPoints;
+  });
+
+  const last = state.scoreHistory[state.scoreHistory.length - 1];
+  if (last && last.bucket === bucket) {
+    return false;
+  }
+
+  state.scoreHistory.push({
+    timestamp: new Date(timestampMs || Date.now()).toISOString(),
+    bucket: bucket,
+    totals: totals
+  });
+  return true;
+}
+
 // ============================================================================
 // RÉCUPÉRATION DES 2 PROCHAINS MATCHS PAR TERRAIN & PAR SPORT (POUR LE PROJETÉ)
 // Règle projeté : n'affiche un match QUE si les 2 équipes sont connues !
@@ -2351,4 +2386,127 @@ if (typeof module !== "undefined" && module.exports) {
     FILIERES,
     STORAGE_KEY
   };
+}
+
+// Rendu partagé de l'historique des scores des filières (admin ou vidéoprojecteur)
+function renderGlobalScoreHistoryChart(history, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const rawEntries = Array.isArray(history) ? history.slice() : [];
+  const seenBuckets = new Set();
+  const entries = rawEntries
+    .filter(entry => entry && typeof entry === "object" && entry.totals)
+    .sort((a, b) => {
+      const at = Date.parse(a.timestamp || a.bucket || 0);
+      const bt = Date.parse(b.timestamp || b.bucket || 0);
+      return at - bt;
+    })
+    .filter(entry => {
+      const key = entry.bucket || entry.timestamp;
+      if (!key || seenBuckets.has(key)) return false;
+      seenBuckets.add(key);
+      return true;
+    });
+
+  if (entries.length === 0) {
+    container.innerHTML = `
+      <div class="score-history-empty">
+        Aucun historique d'évolution disponible pour le moment.<br />
+        Les scores sont enregistrés automatiquement toutes les 15 minutes.
+      </div>
+    `;
+    return;
+  }
+
+  const filieres = FILIERES;
+  const width = 640;
+  const height = 400;
+  const padding = { top: 24, right: 24, bottom: 44, left: 52 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+
+  const timeValues = entries.map(entry => Date.parse(entry.timestamp || entry.bucket || 0));
+  const minTime = Math.min(...timeValues);
+  const maxTime = Math.max(...timeValues);
+  const timeSpan = Math.max(1, maxTime - minTime);
+
+  let maxPoints = 1;
+  filieres.forEach(filiere => {
+    entries.forEach(entry => {
+      const points = Number((entry.totals || {})[filiere.id] || 0);
+      if (points > maxPoints) maxPoints = points;
+    });
+  });
+  maxPoints = Math.ceil(maxPoints * 1.15);
+
+  const xFor = time => padding.left + ((time - minTime) / timeSpan) * plotWidth;
+  const yFor = points => padding.top + plotHeight - (Number(points || 0) / maxPoints) * plotHeight;
+
+  const gridLines = [];
+  for (let i = 0; i <= 4; i++) {
+    const points = Math.round((maxPoints / 4) * i);
+    const y = yFor(points);
+    gridLines.push(`
+      <line x1="${padding.left}" y1="${y}" x2="${padding.left + plotWidth}" y2="${y}" class="score-history-grid" />
+      <text x="${padding.left - 10}" y="${y + 4}" text-anchor="end" class="score-history-axis-label">${points}</text>
+    `);
+  }
+
+  const labelEvery = Math.max(1, Math.ceil(entries.length / 5));
+  const xLabels = entries
+    .filter((entry, index) => index === 0 || index === entries.length - 1 || index % labelEvery === 0)
+    .map(entry => {
+      const time = Date.parse(entry.timestamp || entry.bucket || 0);
+      const x = xFor(time);
+      return `
+        <text x="${x}" y="${height - 16}" text-anchor="middle" class="score-history-axis-label">
+          ${escapeHtml(formatScoreHistoryTime ? formatScoreHistoryTime(entry.timestamp || entry.bucket) : String(entry.timestamp || "").slice(11, 16))}
+        </text>
+      `;
+    })
+    .join("");
+
+  const lines = filieres.map(filiere => {
+    const points = entries.map(entry => `${xFor(Date.parse(entry.timestamp || entry.bucket || 0))},${yFor((entry.totals || {})[filiere.id] || 0)}`).join(" ");
+    const marker = entries[entries.length - 1];
+    const lastX = xFor(Date.parse(marker.timestamp || marker.bucket || 0));
+    const lastY = yFor((marker.totals || {})[filiere.id] || 0);
+    return `
+      <polyline fill="none" stroke="${safeColor(filiere.hex, "#3b82f6")}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" points="${points}" />
+      <circle cx="${lastX}" cy="${lastY}" r="5" fill="${safeColor(filiere.hex, "#3b82f6")}" class="score-history-marker" />
+    `;
+  }).join("");
+
+  const legend = filieres.map(filiere => `
+    <div class="score-history-legend-item">
+      <span class="score-history-legend-color" style="background-color:${safeColor(filiere.hex, "#3b82f6")}"></span>
+      <span>${escapeHtml(filiere.name)}</span>
+    </div>
+  `).join("");
+
+  container.innerHTML = `
+    <div class="score-history-figure-wrap">
+      <svg class="score-history-figure" viewBox="0 0 ${width} ${height}" role="img" aria-label="Évolution des scores par filière">
+        ${gridLines.join("")}
+        ${lines}
+        ${xLabels}
+        <text x="${padding.left}" y="16" text-anchor="start" class="score-history-axis-title">Points</text>
+        <text x="${width / 2}" y="${height - 4}" text-anchor="middle" class="score-history-axis-title">Temps</text>
+      </svg>
+    </div>
+    <div class="score-history-legend">${legend}</div>
+    <div class="score-history-footnote">
+      ${entries.length} point${entries.length > 1 ? "s" : ""} enregistré${entries.length > 1 ? "s" : ""}.
+      Prochaine mise à jour à ${escapeHtml(formatScoreHistoryTime ? formatScoreHistoryTime(new Date(getScoreHistoryBucket(Date.now()) + 15 * 60 * 1000)) : String(new Date().getHours()).padStart(2, "0") + ":" + String(new Date().getMinutes()).padStart(2, "0"))}.
+    </div>
+  `;
+}
+
+function formatScoreHistoryTime(timestamp) {
+  try {
+    return new Date(timestamp).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  } catch (e) {
+    return String(timestamp || "").slice(11, 16);
+  }
 }

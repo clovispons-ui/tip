@@ -213,28 +213,40 @@
       <!-- Résumé du Classement Général côté Admin -->
       <div class="admin-section">
         <div class="panel-header">
-          <h2>🏆 Aperçu du Classement Général des Filières (TIP)</h2>
-          <span style="font-size:0.85rem; color:var(--text-muted);">
-            Barème : 8ème (1 pt) • Quart (2 pts) • Demi (4 pts) • Finale (5 pts) • Vainqueur (7 pts) • Poules : 3G / 2N / 1P
-          </span>
+          <div>
+            <h2>🏆 Aperçu du Classement Général des Filières (TIP)</h2>
+            <span style="font-size:0.85rem; color:var(--text-muted);">
+              Barème : 8ème (1 pt) • Quart (2 pts) • Demi (4 pts) • Finale (5 pts) • Vainqueur (7 pts) • Poules : 3G / 2N / 1P
+            </span>
+          </div>
+          <button id="admin-standings-view-toggle-btn" class="btn" type="button" onclick="toggleAdminStandingsView()">
+            📈 Voir le graphique
+          </button>
         </div>
-        <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
-          <table class="admin-table admin-standings-table" style="min-width:640px;">
-            <thead>
-              <tr>
-                <th style="width:50px;">Rang</th>
-                <th>Filière</th>
-                <th>Couleur</th>
-                <th style="white-space:nowrap;">Foot ⚽</th>
-                <th style="white-space:nowrap;">Basket 🏀</th>
-                <th style="white-space:nowrap;">Volley 🏐</th>
-                <th style="white-space:nowrap;">Relais 🏃</th>
-                <th style="white-space:nowrap;">Dodgeball 🤾</th>
-                <th style="text-align:right; white-space:nowrap;">Total Points</th>
-              </tr>
-            </thead>
-            <tbody id="admin-standings-tbody"></tbody>
-          </table>
+        <div id="admin-standings-table-view">
+          <div style="overflow-x:auto; -webkit-overflow-scrolling:touch;">
+            <table class="admin-table admin-standings-table" style="min-width:640px;">
+              <thead>
+                <tr>
+                  <th style="width:50px;">Rang</th>
+                  <th>Filière</th>
+                  <th>Couleur</th>
+                  <th style="white-space:nowrap;">Foot ⚽</th>
+                  <th style="white-space:nowrap;">Basket 🏀</th>
+                  <th style="white-space:nowrap;">Volley 🏐</th>
+                  <th style="white-space:nowrap;">Relais 🏃</th>
+                  <th style="white-space:nowrap;">Dodgeball 🤾</th>
+                  <th style="text-align:right; white-space:nowrap;">Total Points</th>
+                </tr>
+              </thead>
+              <tbody id="admin-standings-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="admin-standings-chart-view" class="hidden">
+          <div id="admin-standings-chart-container" class="score-history-chart-container">
+            <!-- Injecté par JS -->
+          </div>
         </div>
       </div>
     </div>
@@ -385,6 +397,8 @@
         if (res.success) {
           document.getElementById("login-modal").classList.add("hidden");
           document.getElementById("admin-pwd-input").value = "";
+          startAdminScoreHistoryRecorder();
+          renderDashboard();
         } else {
           errEl.textContent = res.message || "Mot de passe incorrect.";
           errEl.style.display = "block";
@@ -556,6 +570,9 @@
           <td style="text-align:right; font-weight:900; font-size:1.25rem; color:${f.hex};">${f.totalPoints} pts</td>
         </tr>
       `).join("");
+
+      renderGlobalScoreHistoryChart(state.scoreHistory, "admin-standings-chart-container");
+      syncAdminStandingsViewButton();
     }
 
     // 5. Rendu du Détail d'un Sport
@@ -1592,6 +1609,9 @@
       initTheme();
       startRealtimeClock("admin-clock");
       renderDashboard();
+      if (sessionStorage.getItem("ADMIN_AUTH_TOKEN")) {
+        startAdminScoreHistoryRecorder();
+      }
       renderLiveScoreSection();
       refreshTunnelStatus();
 
@@ -1643,6 +1663,188 @@
         }
       });
     });
+  
+    // ======================================================================
+    // VUE ALTERNATIVE DU CLASSEMENT GÉNÉRAL : TABLEAU <--> HISTORIQUE GRAPHIQUE
+    // ======================================================================
+    let adminStandingsViewMode = "table";
+    let adminScoreHistorySnapshotTimer = null;
+
+    function syncAdminStandingsViewButton() {
+      const button = document.getElementById("admin-standings-view-toggle-btn");
+      const tableView = document.getElementById("admin-standings-table-view");
+      const chartView = document.getElementById("admin-standings-chart-view");
+      const chartMode = adminStandingsViewMode === "chart";
+      if (tableView) tableView.classList.toggle("hidden", chartMode);
+      if (chartView) chartView.classList.toggle("hidden", !chartMode);
+      if (button) {
+        button.textContent = chartMode ? "📋 Voir le tableau" : "📈 Voir le graphique";
+      }
+    }
+
+    function toggleAdminStandingsView() {
+      adminStandingsViewMode = adminStandingsViewMode === "chart" ? "table" : "chart";
+      syncAdminStandingsViewButton();
+      if (adminStandingsViewMode === "chart") {
+        renderGlobalScoreHistoryChart(loadState().scoreHistory, "admin-standings-chart-container");
+      }
+    }
+
+    function formatScoreHistoryTime(timestamp) {
+      try {
+        return new Date(timestamp).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      } catch (e) {
+        return String(timestamp || "").slice(11, 16);
+      }
+    }
+
+    function renderAdminScoreHistoryChart(history) {
+      const container = document.getElementById("admin-standings-chart-container");
+      if (!container) return;
+
+      const rawEntries = Array.isArray(history) ? history.slice() : [];
+      const seenBuckets = new Set();
+      const entries = rawEntries
+        .filter(entry => entry && typeof entry === "object" && entry.totals)
+        .sort((a, b) => {
+          const at = Date.parse(a.timestamp || a.bucket || 0);
+          const bt = Date.parse(b.timestamp || b.bucket || 0);
+          return at - bt;
+        })
+        .filter(entry => {
+          const key = entry.bucket || entry.timestamp;
+          if (!key || seenBuckets.has(key)) return false;
+          seenBuckets.add(key);
+          return true;
+        });
+
+      if (entries.length === 0) {
+        container.innerHTML = `
+          <div class="score-history-empty">
+            Aucun historique d'évolution disponible pour le moment.<br />
+            Les scores seront enregistrés automatiquement au premier point et toutes les 15 minutes.
+          </div>
+        `;
+        return;
+      }
+
+      const filieres = FILIERES;
+      const width = 920;
+      const height = 400;
+      const padding = { top: 24, right: 24, bottom: 44, left: 52 };
+      const plotWidth = width - padding.left - padding.right - 140;
+      const plotHeight = height - padding.top - padding.bottom;
+
+      const timeValues = entries.map(entry => Date.parse(entry.timestamp || entry.bucket || 0));
+      const minTime = Math.min(...timeValues);
+      const maxTime = Math.max(...timeValues);
+      const timeSpan = Math.max(1, maxTime - minTime);
+
+      let maxPoints = 1;
+      filieres.forEach(filiere => {
+        entries.forEach(entry => {
+          const points = Number((entry.totals || {})[filiere.id] || 0);
+          if (points > maxPoints) maxPoints = points;
+        });
+      });
+      maxPoints = Math.ceil(maxPoints * 1.15);
+
+      const xFor = time => padding.left + ((time - minTime) / timeSpan) * plotWidth;
+      const yFor = points => padding.top + plotHeight - (Number(points || 0) / maxPoints) * plotHeight;
+
+      const gridLines = [];
+      for (let i = 0; i <= 4; i++) {
+        const points = Math.round((maxPoints / 4) * i);
+        const y = yFor(points);
+        gridLines.push(`
+          <line x1="${padding.left}" y1="${y}" x2="${padding.left + plotWidth}" y2="${y}" class="score-history-grid" />
+          <text x="${padding.left - 10}" y="${y + 4}" text-anchor="end" class="score-history-axis-label">${points}</text>
+        `);
+      }
+
+      const labelEvery = Math.max(1, Math.ceil(entries.length / 8));
+      const xLabels = entries
+        .filter((entry, index) => index === 0 || index === entries.length - 1 || index % labelEvery === 0)
+        .map(entry => {
+          const time = Date.parse(entry.timestamp || entry.bucket || 0);
+          const x = xFor(time);
+          return `
+            <text x="${x}" y="${height - 16}" text-anchor="middle" class="score-history-axis-label">
+              ${escapeHtml(formatScoreHistoryTime(entry.timestamp || entry.bucket))}
+            </text>
+          `;
+        })
+        .join("");
+
+      const colorsLines = filieres.map(filiere => {
+        const points = entries.map(entry => `${xFor(Date.parse(entry.timestamp || entry.bucket || 0))},${yFor((entry.totals || {})[filiere.id] || 0)}`).join(" ");
+        const marker = entries[entries.length - 1];
+        const lastX = xFor(Date.parse(marker.timestamp || marker.bucket || 0));
+        const lastY = yFor((marker.totals || {})[filiere.id] || 0);
+        return `
+          <polyline fill="none" stroke="${safeColor(filiere.hex, "#3b82f6")}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" points="${points}" />
+          <circle cx="${lastX}" cy="${lastY}" r="5" fill="${safeColor(filiere.hex, "#3b82f6")}" class="score-history-marker" />
+        `;
+      }).join("");
+
+      const legend = filieres.map(filiere => `
+        <div class="score-history-legend-item">
+          <span class="score-history-legend-color" style="background-color:${safeColor(filiere.hex, "#3b82f6")}"></span>
+          <span>${escapeHtml(filiere.name)}</span>
+        </div>
+      `).join("");
+
+      container.innerHTML = `
+        <div class="score-history-figure-wrap">
+          <svg class="score-history-figure" viewBox="0 0 ${width} ${height}" role="img" aria-label="Évolution des scores par filière">
+            ${gridLines.join("")}
+            ${colorsLines}
+            ${xLabels}
+            <text x="${padding.left}" y="16" text-anchor="start" class="score-history-axis-title">Points</text>
+            <text x="${width / 2}" y="${height - 4}" text-anchor="middle" class="score-history-axis-title">Temps</text>
+          </svg>
+        </div>
+        <div class="score-history-legend">${legend}</div>
+        <div class="score-history-footnote">
+          ${entries.length} point${entries.length > 1 ? "s" : ""} enregistré${entries.length > 1 ? "s" : ""}.
+          Prochaine mise à jour à ${escapeHtml(formatScoreHistoryTime(new Date(getScoreHistoryBucket(Date.now()) + 15 * 60 * 1000)))}.
+        </div>
+      `;
+    }
+
+    function recordAdminScoreHistorySnapshot() {
+      const state = loadState();
+      if (captureAdminScoreSnapshot(state, Date.now())) {
+        saveState(state);
+      }
+      renderGlobalScoreHistoryChart(state.scoreHistory, "admin-standings-chart-container");
+      if (adminStandingsViewMode === "chart") {
+        syncAdminStandingsViewButton();
+      }
+    }
+
+    let adminScoreHistoryVisibilityBound = false;
+
+    function startAdminScoreHistoryRecorder() {
+      if (adminScoreHistorySnapshotTimer) {
+        clearInterval(adminScoreHistorySnapshotTimer);
+      }
+      recordAdminScoreHistorySnapshot();
+      adminScoreHistorySnapshotTimer = setInterval(recordAdminScoreHistorySnapshot, 60 * 1000);
+      if (!adminScoreHistoryVisibilityBound) {
+        document.addEventListener("visibilitychange", handleAdminScoreHistoryVisibilityChange);
+        adminScoreHistoryVisibilityBound = true;
+      }
+    }
+
+    function handleAdminScoreHistoryVisibilityChange() {
+      if (!document.hidden) {
+        recordAdminScoreHistorySnapshot();
+      }
+    }
+
+    syncAdminStandingsViewButton();
+
   </script>
 </body>
 </html>
