@@ -29,6 +29,9 @@ import re
 import socket
 import mimetypes
 import hashlib
+
+# Enregistre le type MIME woff2 (non toujours présent par défaut selon les distributions)
+mimetypes.add_type('font/woff2', '.woff2')
 import hmac
 import threading
 import time
@@ -121,6 +124,14 @@ STATIC_ALLOWLIST = {
     '/', '/index.html', '/admin.html', '/arbitre.html',
     '/app.js', '/qrcode.js', '/style.css'
 }
+
+# Autorise uniquement les polices auto-hébergées (.woff2 sous /fonts/)
+FONT_PATH_RE = re.compile(r'^/fonts/[A-Za-z0-9_-]+\.woff2$')
+
+def is_static_allowed(path):
+    if path in STATIC_ALLOWLIST:
+        return True
+    return bool(FONT_PATH_RE.match(path))
 
 if not os.path.exists(DATA_DIR):
     try:
@@ -361,8 +372,8 @@ class TIPRequestHandler(BaseHTTPRequestHandler):
         # 'unsafe-inline' requis : l'appli repose sur des gestionnaires inline (onclick/onsubmit).
         # La protection XSS repose sur l'échappement systématique des données (escapeHtml/escapeJsString).
         self.send_header('Content-Security-Policy',
-            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-            "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; media-src 'self'; object-src 'none'")
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+            "font-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self'; object-src 'none'")
         super().end_headers()
 
     def log_message(self, fmt, *args):
@@ -474,7 +485,7 @@ class TIPRequestHandler(BaseHTTPRequestHandler):
             return
 
         # Fichiers statiques : LISTE BLANCHE uniquement (.git, .bin, data/, etc. jamais servis)
-        if path not in STATIC_ALLOWLIST:
+        if not is_static_allowed(path):
             body = b"Fichier non trouv\xc3\xa9"
             self.send_response(404)
             self.send_header('Content-Type', 'text/plain; charset=utf-8')

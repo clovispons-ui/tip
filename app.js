@@ -89,7 +89,7 @@ function loginAs(role, password) {
       }
       return { success: false, message: (data && data.error) || "Mot de passe incorrect" };
     })
-    .catch(() => ({ success: false, message: "Serveur injoignable — lancez ./start.sh" }));
+    .catch(() => ({ success: false, message: "Serveur injoignable. Lancez ./start.sh" }));
 }
 
 function loginAdmin(password) {
@@ -173,7 +173,7 @@ const STAGE_LABELS = {
   QUART: "Quart de finale (2 pts)",
   DEMI: "Demi-finale (4 pts)",
   FINALE: "Finaliste (5 pts)",
-  GAGNANT: "Vainqueur 🏆 (7 pts)"
+  GAGNANT: "Vainqueur (7 pts)"
 };
 
 // 3. Couleurs thématiques distinctes par sport (pour le contour, l'heure et les badges)
@@ -396,12 +396,14 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     let state;
     if (!raw) {
-      state = createInitialState();
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      } catch (e) {}
-      return state;
+      // Aucun localStorage : on génère un état placeholder local.
+      // On ne l'écrit PAS dans localStorage pour qu'il reste identifiable comme placeholder
+      // et ne soit jamais poussé sur un serveur déjà peuplé avant confirmation.
+      localStateIsPlaceholder = true;
+      return createInitialState();
     }
+    // Un état réel existe localement : ce n'est plus un placeholder.
+    localStateIsPlaceholder = false;
     state = JSON.parse(raw);
     let needsSave = false;
 
@@ -604,6 +606,11 @@ let saveStateDebounceTimer = null;
 let pendingStateToSave = null;
 let isSavingToServer = false;
 
+// Drapeaux de protection contre l'écrasement du serveur par un état local vide
+// (placeholder créé au premier chargement d'un navigateur sans localStorage).
+let localStateIsPlaceholder = false;
+let serverStateKnownToExist = null;
+
 function saveState(state) {
   state.lastUpdated = new Date().toISOString();
   try {
@@ -642,6 +649,13 @@ function refereeApiHeaders() {
 
 function executeServerSave() {
   if (isSavingToServer || !pendingStateToSave) return;
+  // Ne jamais pousser un état placeholder sur un serveur qui possède déjà un vrai tournoi.
+  // L'écriture n'est autorisée que si le serveur a explicitement répondu qu'il était vide.
+  if (localStateIsPlaceholder && serverStateKnownToExist !== false) {
+    console.info("[TIP] Sauvegarde serveur ignorée : état local placeholder et serveur déjà peuplé ou non vérifié.");
+    pendingStateToSave = null;
+    return;
+  }
   const stateToSend = pendingStateToSave;
   pendingStateToSave = null;
   isSavingToServer = true;
@@ -945,18 +959,23 @@ function initServerSync(onUpdateCallback) {
           try {
             const data = JSON.parse(e.data);
             if (data.type === "STATE_UPDATE" && data.state) {
+              // Le serveur possède un état réel : on le considère comme non vide dès réception.
+              serverStateKnownToExist = true;
               const prevState = loadState();
-              // Dernier arrivé, dernier servi : un état serveur plus ancien que le local ne écrase pas les scores récents
+              // Dernier arrivé, dernier servi : un état serveur plus ancien que le local ne écrase pas les scores récents.
+              // Exception : un état local placeholder (localStorage vierge) doit toujours céder la place au serveur.
               const serverTs = typeof data.state.lastUpdated === "string" ? data.state.lastUpdated : null;
               const localTs = prevState && typeof prevState.lastUpdated === "string" ? prevState.lastUpdated : null;
-              if (serverTs && localTs && serverTs < localTs) return;
+              if (!localStateIsPlaceholder && serverTs && localTs && serverTs < localTs) return;
+              // L'état serveur devient l'état local réel : ce n'est plus un placeholder.
+              localStateIsPlaceholder = false;
               localStorage.setItem(STORAGE_KEY, JSON.stringify(data.state));
               // Détection alerte flash via STATE_UPDATE
               if (data.state.flashInfo && data.state.flashInfo.active) {
                 const prevTs = (prevState && prevState.flashInfo) ? prevState.flashInfo.timestamp : null;
                 if (data.state.flashInfo.timestamp && data.state.flashInfo.timestamp !== prevTs && data.state.flashInfo.timestamp !== lastSeenFlashTimestamp) {
                   lastSeenFlashTimestamp = data.state.flashInfo.timestamp;
-                  triggerMobileAlert("📢 Flash Info TIP", data.state.flashInfo.message);
+                  triggerMobileAlert("Flash Info TIP", data.state.flashInfo.message);
                 }
               }
               if (typeof onUpdateCallback === "function") onUpdateCallback(data.state);
@@ -966,7 +985,7 @@ function initServerSync(onUpdateCallback) {
               localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
               if (data.flashInfo.active && data.flashInfo.timestamp !== lastSeenFlashTimestamp) {
                 lastSeenFlashTimestamp = data.flashInfo.timestamp;
-                triggerMobileAlert("📢 Flash Info TIP", data.flashInfo.message);
+                triggerMobileAlert("Flash Info TIP", data.flashInfo.message);
               }
               if (typeof onUpdateCallback === "function") onUpdateCallback(state);
             } else if (data.type === "TUNNEL_UPDATE" || (data.type === "CONNECTED" && (data.publicUrl || data.mobileUrl))) {
@@ -1011,6 +1030,8 @@ function initServerSync(onUpdateCallback) {
         .then(res => res.ok ? res.json() : null)
         .then(serverState => {
           if (!serverState || !serverState.sports) return;
+          // Le serveur a répondu avec un état valide : il est peuplé.
+          serverStateKnownToExist = true;
           const localRaw = localStorage.getItem(STORAGE_KEY);
           const localState = localRaw ? JSON.parse(localRaw) : null;
 
@@ -1023,8 +1044,9 @@ function initServerSync(onUpdateCallback) {
 
           const serverTs = typeof serverState.lastUpdated === "string" ? serverState.lastUpdated : null;
           const localTs = localState && typeof localState.lastUpdated === "string" ? localState.lastUpdated : null;
-          // Ne jamais écraser un état local plus récent par un état serveur périmé
-          if (serverTs && localTs && serverTs < localTs && !hasFlashChange) return;
+          // Ne jamais écraser un état local plus récent par un état serveur périmé,
+          // sauf si l'état local est un placeholder qui n'a pas encore de données réelles.
+          if (!localStateIsPlaceholder && serverTs && localTs && serverTs < localTs && !hasFlashChange) return;
 
           const hasStateChange = Boolean(
             !localState ||
@@ -1033,10 +1055,12 @@ function initServerSync(onUpdateCallback) {
           );
 
           if (hasStateChange) {
+            // L'état serveur devient l'état local réel : ce n'est plus un placeholder.
+            localStateIsPlaceholder = false;
             localStorage.setItem(STORAGE_KEY, JSON.stringify(serverState));
             if (hasFlashChange && serverState.flashInfo.timestamp !== lastSeenFlashTimestamp) {
               lastSeenFlashTimestamp = serverState.flashInfo.timestamp;
-              triggerMobileAlert("📢 Flash Info TIP", serverState.flashInfo.message);
+              triggerMobileAlert("Flash Info TIP", serverState.flashInfo.message);
             }
             if (typeof onUpdateCallback === "function") {
               onUpdateCallback(serverState);
@@ -1554,7 +1578,7 @@ function formatAndScheduleTeamSportMatches(sport, activeTeams) {
       id: `${sport.id}_FINALE`,
       order: orderCounter++,
       phase: "FINALE",
-      label: "Grande Finale 🏆",
+      label: "Grande Finale",
       time: knockoutTime,
       pitch: sport.pitchNames[0] || "Terrain Honneur",
       teamAId: null,
@@ -1642,7 +1666,7 @@ function formatAndScheduleRelayMatches(sport, activeTeams) {
       order: order++,
       phase: "FINALE",
       isRace: true,
-      label: `Finale Relais 4x100m 🏆`,
+      label: "Finale Relais 4x100m",
       time: currentTime,
       pitch: sport.pitchNames[0] || "Piste d'Athlétisme",
       raceTeamIds: [null, null, null, null],
@@ -2315,7 +2339,7 @@ function exportSportScheduleToExcel(sport) {
       </style>
     </head>
     <body>
-      <h1>🏆 TOURNOI INTER-PROMO (TIP) — PLANNING OFFICIEL : ${escapeHtml(sport.name.toUpperCase())}</h1>
+      <h1>Tournoi Inter-Filières (TIP) : planning officiel de ${escapeHtml(sport.name)}</h1>
       <div class="rule-box">
         <b>Créneaux horaires :</b> ${escapeHtml(sport.startTime)} - ${escapeHtml(sport.endTime)} &nbsp;•&nbsp;
         <b>Durée des rencontres :</b> ${sport.matchDuration} min &nbsp;•&nbsp;
@@ -2423,12 +2447,14 @@ function toggleTheme() {
 }
 
 function updateThemeButtonLabel() {
+  // Libellé stable : le bouton affiche "Thème" sur l'admin et le projecteur,
+  // sans emoji. La bascule clair/nuit reste portée par la classe du body.
   const btn = document.getElementById("theme-toggle-btn");
   if (!btn) return;
-  const isLight = document.body.classList.contains("light-mode");
-  const icon = isLight ? "🌙" : "☀️";
-  const label = isLight ? "Mode Nuit" : "Mode Clair";
-  btn.innerHTML = `<span class="btn-icon">${icon}</span><span class="btn-text">${label}</span>`;
+  const textEl = btn.querySelector(".btn-text");
+  if (textEl && !(textEl.textContent || "").trim()) {
+    textEl.textContent = "Thème";
+  }
 }
 
 function startRealtimeClock(elementId) {

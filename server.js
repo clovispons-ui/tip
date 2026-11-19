@@ -110,6 +110,12 @@ const STATIC_ALLOWLIST = new Set([
   '/app.js', '/qrcode.js', '/style.css'
 ]);
 
+function isStaticAllowed(pathname) {
+  if (STATIC_ALLOWLIST.has(pathname)) return true;
+  // Polices auto-hébergées uniquement (fichiers .woff2 sous /fonts/)
+  return /^\/fonts\/[A-Za-z0-9_-]+\.woff2$/.test(pathname);
+}
+
 function log(...args) {
   console.log(new Date().toISOString(), ...args);
 }
@@ -386,7 +392,8 @@ const MIME_TYPES = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon'
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2'
 };
 
 const server = http.createServer((req, res) => {
@@ -398,8 +405,8 @@ const server = http.createServer((req, res) => {
   res.setHeader('Content-Security-Policy',
     // 'unsafe-inline' requis : l'appli repose sur des gestionnaires inline (onclick/onsubmit).
     // La protection XSS repose sur l'échappement systématique des données (escapeHtml/escapeJsString).
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-    "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; media-src 'self'; object-src 'none'");
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+    "font-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self'; object-src 'none'");
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -656,7 +663,7 @@ const server = http.createServer((req, res) => {
   // 2. DISTRIBUTION DES FICHIERS STATIQUES (liste blanche uniquement)
   // ==========================================================================
   const pathname = url.pathname;
-  if (!STATIC_ALLOWLIST.has(pathname)) {
+  if (!isStaticAllowed(pathname)) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Fichier non trouvé');
     return;
