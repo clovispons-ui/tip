@@ -46,7 +46,12 @@
   <header class="ref-header">
     <div class="ref-header-top">
       <h1 class="ref-header-title">TIP Arbitre</h1>
-      <button id="ref-logout-btn" class="ref-btn-quiet" onclick="lockRefereeView()" title="Verrouiller l'interface arbitre">Verrouiller</button>
+      <div class="ref-header-actions">
+        <button id="theme-toggle-btn" class="ref-btn-quiet" onclick="toggleTheme()" title="Basculer entre le mode clair et le mode nuit" aria-label="Changer de thème">
+          <span class="btn-text">Thème</span>
+        </button>
+        <button id="ref-logout-btn" class="ref-btn-quiet" onclick="lockRefereeView()" title="Verrouiller l'interface arbitre">Verrouiller</button>
+      </div>
     </div>
     <select id="ref-match-id-select" class="ref-match-selector" onchange="switchCurrentMatch(this.value)" aria-label="Choisir le match en cours">
       <!-- Options injectées en JS : Match 1, Match 2, ... -->
@@ -108,18 +113,13 @@
       </div>
     </div>
 
-    <!-- PERSONNALISATION : repliée, ids et handlers inchangés -->
-    <details class="ref-personalize">
-      <summary>Personnaliser le titre et les noms</summary>
+    <!-- PERSONNALISATION : titre du match, toujours visible -->
+    <div class="ref-personalize">
       <div class="ref-personalize-body">
         <label for="ref-match-title" class="ref-field-label">Titre du match</label>
         <input type="text" id="ref-match-title" value="FINALE FOOTBALL" placeholder="Titre (ex: FINALE FOOTBALL, 1/2 VOLLEY, MATCH 2...)" onchange="onMetaChange()" />
-        <label for="ref-name-a" class="ref-field-label">Nom équipe A</label>
-        <input type="text" id="ref-name-a" value="Matméca" placeholder="Nom Équipe A" onchange="onMetaChange()" />
-        <label for="ref-name-b" class="ref-field-label">Nom équipe B</label>
-        <input type="text" id="ref-name-b" value="Elec" placeholder="Nom Équipe B" onchange="onMetaChange()" />
       </div>
-    </details>
+    </div>
 
     <!-- ACTIONS SECONDAIRES + LIENS VERS LES AUTRES INTERFACES -->
     <div class="ref-actions-footer">
@@ -378,8 +378,6 @@
       const titleEl = document.getElementById("ref-match-title");
       const selA = document.getElementById("ref-filiere-a");
       const selB = document.getElementById("ref-filiere-b");
-      const nameA = document.getElementById("ref-name-a");
-      const nameB = document.getElementById("ref-name-b");
       const scoreAEl = document.getElementById("ref-score-a");
       const scoreBEl = document.getElementById("ref-score-b");
       const cardA = document.getElementById("ref-card-a");
@@ -398,9 +396,6 @@
       if (selA && live.teamAFiliereId) {
         selA.value = live.teamAFiliereId;
       }
-      if (nameA && document.activeElement !== nameA) {
-        nameA.value = live.teamAName || "Équipe A";
-      }
       const colA = live.teamAColor || "#ef4444";
       if (cardA) cardA.style.borderTopColor = colA;
       if (scoreAEl) {
@@ -410,9 +405,6 @@
       // Filière B
       if (selB && live.teamBFiliereId) {
         selB.value = live.teamBFiliereId;
-      }
-      if (nameB && document.activeElement !== nameB) {
-        nameB.value = live.teamBName || "Équipe B";
       }
       const colB = live.teamBColor || "#2563eb";
       if (cardB) cardB.style.borderTopColor = colB;
@@ -543,12 +535,8 @@
       const live = getActiveMatchRecord(state);
 
       const titleEl = document.getElementById("ref-match-title");
-      const nameA = document.getElementById("ref-name-a");
-      const nameB = document.getElementById("ref-name-b");
 
       if (titleEl) live.title = titleEl.value.trim() || "FINALE";
-      if (nameA) live.teamAName = nameA.value.trim() || "Équipe A";
-      if (nameB) live.teamBName = nameB.value.trim() || "Équipe B";
 
       live.updatedAt = Date.now();
       syncLiveScoreObject(state);

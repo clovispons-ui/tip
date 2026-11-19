@@ -3111,6 +3111,14 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   gap: 10px;
 }
 
+/* Groupe d'actions à droite du titre : thème + verrouillage, sans écraser le titre */
+.ref-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .ref-header-title {
   font-family: var(--font-athletic);
   font-size: 1.2rem;
@@ -3371,7 +3379,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   transform: scale(0.98);
 }
 
-/* --- Personnalisation : titre et noms repliés dans un details --- */
+/* --- Personnalisation : champ titre toujours visible --- */
 .ref-personalize {
   background: var(--color-surface);
   border: 1px solid var(--border-color);
@@ -3379,54 +3387,17 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   margin-bottom: 12px;
 }
 
-/* Sommaire nativement actionnable au clavier (Entrée / Espace) */
-.ref-personalize summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 48px;
-  padding: 8px 14px;
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--color-ink);
-  cursor: pointer;
-  list-style: none;
-}
-
-.ref-personalize summary::-webkit-details-marker {
-  display: none;
-}
-
-/* Chevrons dessinés en CSS, pas d'émoji */
-.ref-personalize summary::after {
-  content: "";
-  flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  margin-right: 4px;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: rotate(45deg);
-  transition: transform 150ms ease;
-}
-
-.ref-personalize[open] summary::after {
-  transform: rotate(225deg);
-}
-
 .ref-personalize-body {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 2px 14px 14px;
+  padding: 12px 14px 14px;
 }
 
 .ref-field-label {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--color-muted);
-  margin-top: 6px;
 }
 
 .ref-personalize-body input {

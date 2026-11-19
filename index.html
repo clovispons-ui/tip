@@ -475,6 +475,8 @@
 
       // CAS B : Calendrier normal des matchs (2 prochains matchs par terrain & sport)
       const nextMatches = getNextMatchesForProjection(state, currentSportFilter);
+      // Vue "Tous les sports" : on n'affiche que les 8 prochains événements
+      const visibleMatches = currentSportFilter === "ALL" ? nextMatches.slice(0, 8) : nextMatches;
 
       const filterButtonsHtml = `
         <div class="filter-tabs">
@@ -488,7 +490,7 @@
       `;
 
       let matchesHtml = "";
-      if (nextMatches.length === 0) {
+      if (visibleMatches.length === 0) {
         matchesHtml = `
           <div class="matches-empty">
             <h3>Aucun match à venir programmé</h3>
@@ -498,7 +500,7 @@
       } else {
         matchesHtml = `
           <div class="matches-feed-projection">
-            ${nextMatches.map(m => {
+            ${visibleMatches.map(m => {
               const theme = m.sportTheme;
               const sport = m.sportRef;
 
@@ -517,11 +519,11 @@
                 return `
                   <article class="projector-match-card" style="--match-accent: ${theme.color};">
                     <div class="match-card-top">
-                      <span class="venue-badge-prominent">${escapeHtml(String(m.pitch ?? ""))}</span>
+                      <span class="venue-badge-prominent">${escapeHtml(String(m.pitch ?? ""))}${m.sportName ? ` · ${escapeHtml(String(m.sportName))}` : ""}</span>
                       <span class="time-badge-sport">${escapeHtml(String(m.time ?? ""))}</span>
                     </div>
 
-                    <span class="match-detail-label">${escapeHtml(String(m.sportName ?? ""))} • ${escapeHtml(String(m.label ?? ""))}</span>
+                    <span class="match-detail-label">${escapeHtml(String(m.label ?? ""))}</span>
 
                     <div class="race-lanes">${lanesHtml}</div>
 
@@ -555,11 +557,11 @@
               return `
                 <article class="projector-match-card" style="--match-accent: ${theme.color};">
                   <div class="match-card-top">
-                    <span class="venue-badge-prominent">${escapeHtml(String(m.pitch ?? ""))}</span>
+                    <span class="venue-badge-prominent">${escapeHtml(String(m.pitch ?? ""))}${m.sportName ? ` · ${escapeHtml(String(m.sportName))}` : ""}</span>
                     <span class="time-badge-sport">${escapeHtml(String(m.time ?? ""))}</span>
                   </div>
 
-                  <span class="match-detail-label">${escapeHtml(String(m.sportName ?? ""))} • ${escapeHtml(String(m.label ?? ""))}</span>
+                  <span class="match-detail-label">${escapeHtml(String(m.label ?? ""))}</span>
 
                   <div class="match-confrontation">
                     ${badgeA}
@@ -579,14 +581,14 @@
       }
 
       const panelSubtitle = currentSportFilter === "ALL"
-        ? "Rencontres confirmées programmées par terrain (2 prochains matchs)"
+        ? ""
         : `Tous les matchs (${nextMatches.length}) programmés pour cette discipline`;
 
       rightContent.innerHTML = `
         <div class="panel-header">
           <div>
             <h2>Prochains matchs</h2>
-            <span class="panel-subtitle">${panelSubtitle}</span>
+            ${panelSubtitle ? `<span class="panel-subtitle">${panelSubtitle}</span>` : ""}
           </div>
         </div>
         ${filterButtonsHtml}
