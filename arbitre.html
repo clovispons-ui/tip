@@ -2,350 +2,135 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <!-- viewport-fit=cover : expose env(safe-area-inset-*) pour le padding du body -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Marqueur de Score & Chrono Arbitre - TIP</title>
   <link rel="stylesheet" href="style.css" />
   <style>
+    /* Couche de coque propre à l'écran arbitre : le body est partagé par
+       toutes les pages, les composants .ref-* vivent dans style.css.
+       Marges 12px + zones sûres de l'écran (encoche / gestes iOS, Android). */
     body {
-      background-color: var(--bg-main, #0f172a);
-      color: var(--text-main, #f8fafc);
-      margin: 0;
-      padding: 0.4rem;
-      font-family: var(--font-main, system-ui, -apple-system, sans-serif);
+      background: var(--color-canvas, #000000);
+      color: var(--color-ink, #F5F7FA);
+      font-family: var(--font-body, system-ui, -apple-system, sans-serif);
+      margin: 0 auto;
+      max-width: 640px; /* tenu en main : largeur plafonnée, centrée ailleurs */
+      padding:
+        calc(12px + env(safe-area-inset-top, 0px))
+        calc(12px + env(safe-area-inset-right, 0px))
+        calc(12px + env(safe-area-inset-bottom, 0px))
+        calc(12px + env(safe-area-inset-left, 0px));
       -webkit-tap-highlight-color: transparent;
       user-select: none;
-    }
-    .ref-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0.4rem 0.6rem;
-      background: var(--bg-card, #1e293b);
-      border-radius: 12px;
-      margin-bottom: 0.5rem;
-      border: 1px solid var(--border-color, #334155);
-      flex-wrap: wrap;
-      gap: 0.4rem;
-    }
-    .ref-header-left {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-    .ref-header h1 {
-      font-size: 1.1rem;
-      margin: 0;
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-      font-family: var(--font-athletic, sans-serif);
-      letter-spacing: 0.05em;
-    }
-    .ref-match-selector {
-      font-size: 0.82rem;
-      font-weight: 800;
-      padding: 0.3rem 0.5rem;
-      border-radius: 8px;
-      background: #0f172a;
-      color: #38bdf8;
-      border: 1px solid #38bdf8;
-      cursor: pointer;
-    }
-    .ref-card {
-      background: var(--bg-card, #1e293b);
-      border: 1px solid var(--border-color, #334155);
-      border-radius: 14px;
-      padding: 0.5rem 0.6rem;
-      margin-bottom: 0.5rem;
-    }
-    .ref-match-title-row {
-      display: flex;
-      gap: 0.4rem;
-      margin-bottom: 0.45rem;
-    }
-    .ref-match-title-row input {
-      width: 100%;
-      font-size: 0.95rem;
-      font-weight: 800;
-      padding: 0.45rem 0.65rem;
-      border-radius: 8px;
-      background: rgba(0,0,0,0.3);
-      border: 1px solid var(--border-color, #475569);
-      color: #fff;
-    }
-    .ref-timer-section {
-      text-align: center;
-      padding: 0.5rem 0.4rem;
-      background: rgba(0, 0, 0, 0.35);
-      border-radius: 12px;
-      margin-bottom: 0.6rem;
-      border: 1px solid var(--border-color, #334155);
-    }
-    .ref-timer-big {
-      font-family: var(--font-mono, monospace);
-      font-size: clamp(2.8rem, 11vw, 4.2rem);
-      font-weight: 900;
-      color: #facc15;
-      line-height: 1;
-      text-shadow: 0 0 20px rgba(250, 204, 21, 0.4);
-      letter-spacing: 0.05em;
-      margin: 0.15rem 0 0.35rem 0;
-    }
-    .ref-timer-controls {
-      display: flex;
-      justify-content: center;
-      gap: 0.5rem;
-      margin-bottom: 0.45rem;
-    }
-    .ref-timer-btn {
-      padding: 0.5rem 1.2rem;
-      font-size: 1rem;
-      font-weight: 800;
-      border-radius: 10px;
-      cursor: pointer;
-      border: none;
-      transition: transform 0.1s, opacity 0.2s;
-    }
-    .ref-timer-btn:active {
-      transform: scale(0.96);
-    }
-    /* Défilement / molette Minutes et Secondes compact */
-    .ref-time-picker-row {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.35rem;
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: #94a3b8;
-    }
-    .ref-wheel-select {
-      font-family: var(--font-mono, monospace);
-      font-size: 1.05rem;
-      font-weight: 800;
-      padding: 0.25rem 0.45rem;
-      border-radius: 8px;
-      background: #0f172a;
-      color: #f8fafc;
-      border: 1px solid #475569;
-      cursor: pointer;
-      text-align: center;
-    }
-    .ref-teams-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.5rem;
-    }
-    .ref-team-box {
-      border-radius: 12px;
-      padding: 0.6rem 0.4rem;
-      background: rgba(0, 0, 0, 0.25);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      border-top: 6px solid #ef4444;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      border-left: 1px solid rgba(255,255,255,0.08);
-      border-right: 1px solid rgba(255,255,255,0.08);
-    }
-    .ref-filiere-select {
-      width: 100%;
-      font-size: 0.92rem;
-      font-weight: 800;
-      padding: 0.38rem 0.25rem;
-      border-radius: 8px;
-      background: #1e293b;
-      color: #fff;
-      border: 2px solid transparent;
-      text-align: center;
-      margin-bottom: 0.35rem;
-      cursor: pointer;
-    }
-    .ref-team-name-custom {
-      width: 100%;
-      font-size: 0.82rem;
-      font-weight: 700;
-      padding: 0.25rem 0.35rem;
-      border-radius: 6px;
-      background: rgba(0,0,0,0.25);
-      border: 1px solid rgba(255,255,255,0.15);
-      color: #fff;
-      text-align: center;
-      margin-bottom: 0.4rem;
-    }
-    .ref-score-big {
-      font-family: var(--font-athletic, sans-serif);
-      font-size: clamp(3.4rem, 14vw, 5rem);
-      font-weight: 900;
-      line-height: 1;
-      margin: 0.1rem 0 0.5rem 0;
-      text-shadow: 0 4px 15px rgba(0,0,0,0.6);
-    }
-    .ref-score-actions {
-      display: flex;
-      gap: 0.4rem;
-      width: 100%;
-    }
-    .btn-score-big {
-      flex: 1;
-      font-size: 1.5rem;
-      font-weight: 900;
-      padding: 0.6rem 0;
-      border-radius: 10px;
-      border: none;
-      cursor: pointer;
-      line-height: 1;
-      touch-action: manipulation;
-    }
-    .btn-score-big:active {
-      transform: scale(0.95);
-    }
-    .btn-plus {
-      background: #22c55e;
-      color: #0f172a;
-    }
-    .btn-minus {
-      background: #ef4444;
-      color: #ffffff;
-    }
-    .ref-actions-footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 0.6rem;
-      gap: 0.4rem;
-      flex-wrap: wrap;
-    }
-    .ref-footer-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0.4rem 0.6rem;
-      font-size: 0.8rem;
-      color: var(--text-muted, #94a3b8);
-      margin-top: 0.3rem;
     }
   </style>
 </head>
 <body>
 
-  <!-- ÉCRAN DE CONNEXION ARBITRE (mot de passe distinct de l'admin) -->
-  <div id="ref-login-modal" class="login-overlay">
+  <!-- ÉCRAN DE CONNEXION ARBITRE (mot de passe distinct de l'admin, login obligatoire : Échap ne le ferme pas) -->
+  <div id="ref-login-modal" class="login-overlay" role="dialog" aria-modal="true" aria-labelledby="ref-login-title" tabindex="-1">
     <div class="login-box">
-      <div style="font-size: 3rem; margin-bottom: 0.5rem;">🔒</div>
-      <h2>Accès Arbitre - TIP</h2>
+      <h2 id="ref-login-title">Accès arbitre</h2>
       <p>Veuillez saisir le mot de passe arbitre</p>
-      <form onsubmit="handleRefereeLogin(event)" style="display:flex; flex-direction:column; gap:0.85rem;">
+      <form onsubmit="handleRefereeLogin(event)" class="ref-login-form">
+        <label for="ref-pwd-input" class="ref-login-label">Mot de passe arbitre</label>
         <input type="password" id="ref-pwd-input" placeholder="Mot de passe..." required autofocus />
         <div id="ref-login-error" style="color:var(--accent-danger); font-size:0.85rem; display:none;">Mot de passe incorrect.</div>
-        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:0.75rem;">Déverrouiller l'interface Arbitre</button>
+        <button type="submit" class="btn btn-primary ref-login-submit">Déverrouiller l'interface arbitre</button>
       </form>
     </div>
   </div>
 
-  <!-- EN-TÊTE ARBITRE AVEC CHOIX DU MATCH & BOUTON PROJECTION -->
+  <!-- EN-TÊTE COMPACT (non collant) : titre, choix du match, verrouillage -->
   <header class="ref-header">
-    <div class="ref-header-left">
-      <h1><span>⏱️</span> ARBITRE</h1>
-      <select id="ref-match-id-select" class="ref-match-selector" onchange="switchCurrentMatch(this.value)">
-        <!-- Options injectées en JS : Match 1, Match 2, Match 3, Match 4 -->
-      </select>
+    <div class="ref-header-top">
+      <h1 class="ref-header-title">TIP Arbitre</h1>
+      <button id="ref-logout-btn" class="ref-btn-quiet" onclick="lockRefereeView()" title="Verrouiller l'interface arbitre">Verrouiller</button>
     </div>
-    <div class="ref-proj-toggle" style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-      <button id="ref-proj-btn" class="btn btn-sm" onclick="toggleProjection()" style="font-weight: 800; font-size: 0.82rem; padding: 0.4rem 0.75rem;">
-        📺 Projeter Plein Écran
-      </button>
-      <button id="ref-logout-btn" class="btn btn-sm" onclick="lockRefereeView()" title="Verrouiller l'interface arbitre" style="font-weight: 800; font-size: 0.82rem; padding: 0.4rem 0.75rem;">
-        🔒 Verrouiller
-      </button>
-    </div>
+    <select id="ref-match-id-select" class="ref-match-selector" onchange="switchCurrentMatch(this.value)" aria-label="Choisir le match en cours">
+      <!-- Options injectées en JS : Match 1, Match 2, ... -->
+    </select>
   </header>
 
-  <!-- CONTENEUR DU MATCH ACTIF -->
   <main>
-    <div class="ref-card">
-      <div class="ref-match-title-row">
-        <input type="text" id="ref-match-title" value="FINALE FOOTBALL" placeholder="Titre (ex: FINALE FOOTBALL, 1/2 VOLLEY, MATCH 2...)" onchange="onMetaChange()" />
+    <!-- PROJECTION : action pleine largeur, explication visible si l'écran est occupé -->
+    <div class="ref-proj-row">
+      <button id="ref-proj-btn" class="ref-proj-btn" onclick="toggleProjection()">Projeter plein écran</button>
+      <p id="ref-proj-note" class="ref-proj-note" role="status" hidden></p>
+    </div>
+
+    <!-- CHRONOMÈTRE : chiffres condensés à largeur fixe, durée réglable -->
+    <div class="ref-timer-section">
+      <div id="ref-timer-display" class="ref-timer-big">10:00</div>
+      <div class="ref-timer-controls">
+        <button id="ref-timer-toggle-btn" class="ref-timer-btn btn-primary" onclick="toggleTimer()">Démarrer</button>
+        <button id="ref-timer-reset-btn" class="ref-timer-btn ref-timer-reset" onclick="resetTimer()">Réinitialiser le chrono</button>
       </div>
-
-      <!-- CHRONOMÈTRE ARBITRE AVEC SÉLECTION MINUTES/SECONDES PAR DÉFILEMENT COMPACT -->
-      <div class="ref-timer-section">
-        <div id="ref-timer-display" class="ref-timer-big">10:00</div>
-        
-        <div class="ref-timer-controls">
-          <button id="ref-timer-toggle-btn" class="ref-timer-btn btn-primary" onclick="toggleTimer()">
-            ▶ Démarrer
-          </button>
-          <button class="ref-timer-btn" style="background: #475569; color: #fff;" onclick="resetTimer()">
-            ↺ Reset
-          </button>
-        </div>
-
-        <!-- Réglage compact par liste déroulante minutes et secondes -->
-        <div class="ref-time-picker-row">
-          <span>Durée :</span>
-          <select id="ref-wheel-min" class="ref-wheel-select" onchange="onWheelTimeChange()">
-            <!-- Options 00 à 60 minutes -->
-          </select>
-          <span>m</span>
-          <select id="ref-wheel-sec" class="ref-wheel-select" onchange="onWheelTimeChange()">
-            <!-- Options 00 à 59 secondes -->
-          </select>
-          <span>s</span>
-        </div>
-      </div>
-
-      <!-- DEUX ÉQUIPES : SÉLECTION FILIÈRE & SCORE -->
-      <div class="ref-teams-grid">
-        <!-- ÉQUIPE A -->
-        <div class="ref-team-box" id="ref-card-a">
-          <label style="font-size: 0.72rem; color: #94a3b8; font-weight: 800; text-transform: uppercase; margin-bottom: 0.2rem;">Équipe A</label>
-          <select id="ref-filiere-a" class="ref-filiere-select" onchange="onFiliereChange('A')">
-            <!-- Rempli en JS avec les filières -->
-          </select>
-          <input type="text" id="ref-name-a" class="ref-team-name-custom" value="Matméca" placeholder="Nom Équipe A" onchange="onMetaChange()" />
-          
-          <div id="ref-score-a" class="ref-score-big" style="color: #ef4444;">0</div>
-
-          <div class="ref-score-actions">
-            <button class="btn-score-big btn-plus" onclick="changeScore('A', 1)">+1</button>
-            <button class="btn-score-big btn-minus" onclick="changeScore('A', -1)">-1</button>
-          </div>
-        </div>
-
-        <!-- ÉQUIPE B -->
-        <div class="ref-team-box" id="ref-card-b">
-          <label style="font-size: 0.72rem; color: #94a3b8; font-weight: 800; text-transform: uppercase; margin-bottom: 0.2rem;">Équipe B</label>
-          <select id="ref-filiere-b" class="ref-filiere-select" onchange="onFiliereChange('B')">
-            <!-- Rempli en JS avec les filières -->
-          </select>
-          <input type="text" id="ref-name-b" class="ref-team-name-custom" value="Elec" placeholder="Nom Équipe B" onchange="onMetaChange()" />
-          
-          <div id="ref-score-b" class="ref-score-big" style="color: #2563eb;">0</div>
-
-          <div class="ref-score-actions">
-            <button class="btn-score-big btn-plus" onclick="changeScore('B', 1)">+1</button>
-            <button class="btn-score-big btn-minus" onclick="changeScore('B', -1)">-1</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- BOUTON RESET SCORES -->
-      <div class="ref-actions-footer">
-        <button class="btn btn-sm" onclick="resetScores()" style="background: rgba(255,255,255,0.08); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.1);">
-          Réinitialiser scores (0 - 0)
-        </button>
-        <button class="btn btn-sm" onclick="addNewLiveMatchSlot()" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid #38bdf8; font-weight: 700;">
-          + Nouveau Match
-        </button>
+      <div class="ref-time-picker-row">
+        <label for="ref-wheel-min">Minutes</label>
+        <select id="ref-wheel-min" class="ref-wheel-select" onchange="onWheelTimeChange()">
+          <!-- Options 00 à 60 minutes -->
+        </select>
+        <label for="ref-wheel-sec">Secondes</label>
+        <select id="ref-wheel-sec" class="ref-wheel-select" onchange="onWheelTimeChange()">
+          <!-- Options 00 à 59 secondes -->
+        </select>
       </div>
     </div>
-  </main>
 
-  <footer class="ref-footer-bar">
-    <span>TIP • Interface Arbitre</span>
-    <a href="admin.html" style="color: var(--accent-primary, #38bdf8); text-decoration: none; font-weight: 700;">← Retour Admin</a>
-  </footer>
+    <!-- DEUX ÉQUIPES : FILET FILIÈRE 4PX, SÉLECTEUR, SCORE EN ENCRE, +1 DOMINANT -->
+    <div class="ref-teams-grid">
+      <!-- ÉQUIPE A -->
+      <div class="ref-team-box" id="ref-card-a">
+        <span class="ref-team-tag" aria-hidden="true">Équipe A</span>
+        <select id="ref-filiere-a" class="ref-filiere-select" onchange="onFiliereChange('A')" aria-label="Filière équipe A">
+          <!-- Rempli en JS avec les filières -->
+        </select>
+        <div id="ref-score-a" class="ref-score-big">0</div>
+        <div class="ref-score-actions">
+          <button class="btn-score-big btn-plus" onclick="changeScore('A', 1)" aria-label="Ajouter 1 point à l'équipe A">+1</button>
+          <button class="btn-score-big btn-minus" onclick="changeScore('A', -1)" aria-label="Retirer 1 point à l'équipe A">-1</button>
+        </div>
+      </div>
+
+      <!-- ÉQUIPE B -->
+      <div class="ref-team-box" id="ref-card-b">
+        <span class="ref-team-tag" aria-hidden="true">Équipe B</span>
+        <select id="ref-filiere-b" class="ref-filiere-select" onchange="onFiliereChange('B')" aria-label="Filière équipe B">
+          <!-- Rempli en JS avec les filières -->
+        </select>
+        <div id="ref-score-b" class="ref-score-big">0</div>
+        <div class="ref-score-actions">
+          <button class="btn-score-big btn-plus" onclick="changeScore('B', 1)" aria-label="Ajouter 1 point à l'équipe B">+1</button>
+          <button class="btn-score-big btn-minus" onclick="changeScore('B', -1)" aria-label="Retirer 1 point à l'équipe B">-1</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PERSONNALISATION : repliée, ids et handlers inchangés -->
+    <details class="ref-personalize">
+      <summary>Personnaliser le titre et les noms</summary>
+      <div class="ref-personalize-body">
+        <label for="ref-match-title" class="ref-field-label">Titre du match</label>
+        <input type="text" id="ref-match-title" value="FINALE FOOTBALL" placeholder="Titre (ex: FINALE FOOTBALL, 1/2 VOLLEY, MATCH 2...)" onchange="onMetaChange()" />
+        <label for="ref-name-a" class="ref-field-label">Nom équipe A</label>
+        <input type="text" id="ref-name-a" value="Matméca" placeholder="Nom Équipe A" onchange="onMetaChange()" />
+        <label for="ref-name-b" class="ref-field-label">Nom équipe B</label>
+        <input type="text" id="ref-name-b" value="Elec" placeholder="Nom Équipe B" onchange="onMetaChange()" />
+      </div>
+    </details>
+
+    <!-- ACTIONS SECONDAIRES + LIENS VERS LES AUTRES INTERFACES -->
+    <div class="ref-actions-footer">
+      <button class="ref-btn-quiet" onclick="resetScores()">Réinitialiser scores (0 - 0)</button>
+      <button class="ref-btn-quiet" onclick="addNewLiveMatchSlot()">Nouveau match</button>
+    </div>
+    <nav class="ref-links-row" aria-label="Autres interfaces">
+      <a href="admin.html" target="_blank" rel="noopener" class="ref-link">Administration</a>
+      <a href="index.html" target="_blank" rel="noopener" class="ref-link">Affichage public</a>
+    </nav>
+  </main>
 
   <script src="app.js"></script>
   <script>
@@ -368,6 +153,14 @@
     // ========================================================================
     let refereeAuthenticated = false;
     let refereeSyncStarted = false;
+    let refLoginOpener = null;
+
+    // Tant que le login obligatoire est affiché, l'en-tête et le contenu
+    // deviennent inaccessibles au clavier et aux lecteurs d'écran (inert).
+    function setRefereeLoginLocked(locked) {
+      [document.querySelector("header.ref-header"), document.querySelector("main")]
+        .forEach(el => { if (el) el.inert = locked; });
+    }
 
     function handleRefereeLogin(e) {
       e.preventDefault();
@@ -390,6 +183,10 @@
       refereeAuthenticated = true;
       const modal = document.getElementById("ref-login-modal");
       if (modal) modal.classList.add("hidden");
+      setRefereeLoginLocked(false);
+      // Rend le focus au contrôle déclencheur (le bouton "Verrouiller")
+      if (refLoginOpener && refLoginOpener.isConnected) refLoginOpener.focus();
+      refLoginOpener = null;
       renderRefereeView();
       if (!refereeSyncStarted) {
         refereeSyncStarted = true;
@@ -402,8 +199,10 @@
     function lockRefereeView() {
       try { sessionStorage.removeItem("REFEREE_AUTH_TOKEN"); } catch (e) {}
       refereeAuthenticated = false;
+      refLoginOpener = document.activeElement; // le bouton "Verrouiller"
       const modal = document.getElementById("ref-login-modal");
       if (modal) modal.classList.remove("hidden");
+      setRefereeLoginLocked(true);
       const input = document.getElementById("ref-pwd-input");
       if (input) {
         input.value = "";
@@ -527,7 +326,7 @@
       const matches = Object.values(state.liveMatches || {});
       select.innerHTML = matches.map(m => {
         const safeId = escapeHtml(m.id);
-        const star = m.active ? " 📺 (PROJETÉ)" : "";
+        const star = m.active ? " (projeté)" : "";
         return `<option value="${safeId}" ${m.id === currentMatchId ? "selected" : ""}>Match ${escapeHtml(String(m.id).replace("match_", ""))}: ${escapeHtml(m.title || "Match")}${star}</option>`;
       }).join("");
     }
@@ -586,6 +385,7 @@
       const cardA = document.getElementById("ref-card-a");
       const cardB = document.getElementById("ref-card-b");
       const projBtn = document.getElementById("ref-proj-btn");
+      const projNote = document.getElementById("ref-proj-note");
       const minWheel = document.getElementById("ref-wheel-min");
       const secWheel = document.getElementById("ref-wheel-sec");
 
@@ -593,7 +393,8 @@
         titleEl.value = live.title || "FINALE";
       }
 
-      // Filière A
+      // Filière A : la couleur filière ne vit que sur le filet haut de 4px,
+      // le score reste en encre (couleur de texte jamais posée en JS)
       if (selA && live.teamAFiliereId) {
         selA.value = live.teamAFiliereId;
       }
@@ -604,7 +405,6 @@
       if (cardA) cardA.style.borderTopColor = colA;
       if (scoreAEl) {
         scoreAEl.textContent = live.scoreA !== undefined ? live.scoreA : 0;
-        scoreAEl.style.color = colA;
       }
 
       // Filière B
@@ -618,7 +418,6 @@
       if (cardB) cardB.style.borderTopColor = colB;
       if (scoreBEl) {
         scoreBEl.textContent = live.scoreB !== undefined ? live.scoreB : 0;
-        scoreBEl.style.color = colB;
       }
 
       // Molettes minutes et secondes
@@ -638,28 +437,26 @@
 
       if (projBtn) {
         if (live.active) {
-          projBtn.className = "btn btn-danger btn-sm";
+          projBtn.className = "ref-proj-btn proj-live";
           projBtn.disabled = false;
-          projBtn.title = "Cliquez pour retirer ce match de l'écran";
-          projBtn.innerHTML = "🔴 Retirer de l'Écran";
+          projBtn.innerHTML = "Retirer de l'écran";
+          if (projNote) projNote.hidden = true;
         } else if (otherProjectedMatch) {
-          // Un autre match est déjà projeté : désactiver le bouton pour ce match !
-          projBtn.className = "btn btn-sm";
-          projBtn.style.background = "#475569";
-          projBtn.style.color = "#94a3b8";
-          projBtn.style.cursor = "not-allowed";
+          // Un autre match est déjà projeté : bouton désactivé pour ce match,
+          // l'explication est affichée en texte visible sous le bouton
+          projBtn.className = "ref-proj-btn";
           projBtn.disabled = true;
-          projBtn.title = `Déjà occupé par "${otherProjectedMatch.title || otherProjectedMatch.id}". Cet autre match doit d'abord être retiré.`;
-          projBtn.innerHTML = `🔒 Écran Occupé (${escapeHtml(String(otherProjectedMatch.id).replace("match_", "M"))})`;
+          projBtn.innerHTML = "Écran occupé (" + escapeHtml(String(otherProjectedMatch.id).replace("match_", "Match ")) + ")";
+          if (projNote) {
+            projNote.textContent = `Écran occupé par "${otherProjectedMatch.title || otherProjectedMatch.id}" : ce match doit d'abord être retiré de l'écran.`;
+            projNote.hidden = false;
+          }
         } else {
           // Libre : peut être projeté
-          projBtn.className = "btn btn-warning btn-sm";
-          projBtn.style.background = "";
-          projBtn.style.color = "";
-          projBtn.style.cursor = "pointer";
+          projBtn.className = "ref-proj-btn";
           projBtn.disabled = false;
-          projBtn.title = "Projeter ce match en plein écran sur le vidéoprojecteur";
-          projBtn.innerHTML = "📺 Projeter Plein Écran";
+          projBtn.innerHTML = "Projeter plein écran";
+          if (projNote) projNote.hidden = true;
         }
       }
 
@@ -686,10 +483,10 @@
       if (toggleBtn) {
         if (live.timerRunning) {
           toggleBtn.className = "ref-timer-btn btn-warning";
-          toggleBtn.innerHTML = "⏸ Pause";
+          toggleBtn.innerHTML = "Pause";
         } else {
           toggleBtn.className = "ref-timer-btn btn-primary";
-          toggleBtn.innerHTML = "▶ Démarrer";
+          toggleBtn.innerHTML = "Démarrer";
         }
       }
     }
@@ -874,6 +671,7 @@
 
     // Initialisation
     document.addEventListener("DOMContentLoaded", () => {
+      initTheme();
       populateWheelSelects();
       populateFiliereSelects();
 
@@ -883,6 +681,7 @@
       } else {
         const modal = document.getElementById("ref-login-modal");
         if (modal) modal.classList.remove("hidden");
+        setRefereeLoginLocked(true);
         const input = document.getElementById("ref-pwd-input");
         if (input) setTimeout(() => input.focus(), 50);
       }

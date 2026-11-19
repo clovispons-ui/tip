@@ -7,14 +7,13 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- ÉCRAN DE CONNEXION PROTÉGÉ PAR MOT DE PASSE -->
-  <div id="login-modal" class="login-overlay">
+  <!-- ÉCRAN DE CONNEXION PROTÉGÉ PAR MOT DE PASSE (dialogue obligatoire : Échap ne le ferme pas) -->
+  <div id="login-modal" class="login-overlay" role="dialog" aria-modal="true" aria-labelledby="login-modal-title" tabindex="-1">
     <div class="login-box">
-      <div style="font-size: 3rem; margin-bottom: 0.5rem;">🔒</div>
-      <h2>Accès Organisateur - TIP</h2>
+      <h2 id="login-modal-title">Accès organisateur - TIP</h2>
       <p>Veuillez saisir le mot de passe administrateur</p>
       <form onsubmit="handleAdminLogin(event)" style="display:flex; flex-direction:column; gap:0.85rem;">
-        <input type="password" id="admin-pwd-input" placeholder="Mot de passe..." required autofocus />
+        <input type="password" id="admin-pwd-input" placeholder="Mot de passe..." required autofocus aria-label="Mot de passe administrateur" />
         <div id="login-error" style="color:var(--accent-danger); font-size:0.85rem; display:none;">Mot de passe incorrect.</div>
         <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:0.75rem;">Déverrouiller l'interface Admin</button>
       </form>
@@ -22,10 +21,9 @@
   </div>
 
   <!-- MODAL DE CHOIX D'INITIALISATION DU SPORT -->
-  <div id="init-modal" class="login-overlay hidden">
+  <div id="init-modal" class="login-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="init-modal-title" tabindex="-1">
     <div class="login-box" style="max-width: 500px; text-align: left;">
-      <div style="font-size: 2.5rem; text-align: center; margin-bottom: 0.5rem;">🎲</div>
-      <h2 style="text-align: center; margin-bottom: 0.35rem;">Initialiser ce sport</h2>
+      <h2 id="init-modal-title" style="text-align: center; margin-bottom: 0.35rem;">Initialiser ce sport</h2>
       <p style="text-align: center; color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
         Choisissez comment générer le calendrier et les poules :
       </p>
@@ -33,7 +31,7 @@
       <div style="display: flex; flex-direction: column; gap: 0.9rem;">
         <button class="btn btn-primary" style="justify-content: flex-start; padding: 1rem; text-align: left;" onclick="confirmInitMode('complete')">
           <div>
-            <div style="font-size: 1.05rem; font-weight: 800; margin-bottom: 0.25rem;">⚡ Compléter l'existant</div>
+            <div style="font-size: 1.05rem; font-weight: 800; margin-bottom: 0.25rem;">Compléter l'existant</div>
             <div style="font-size: 0.82rem; font-weight: normal; opacity: 0.9; line-height: 1.35;">
               Conserve vos poules, matchs et scores déjà saisis, et génère uniquement ce qui manque pour les équipes actives.
             </div>
@@ -42,7 +40,7 @@
 
         <button class="btn btn-danger" style="justify-content: flex-start; padding: 1rem; text-align: left;" onclick="confirmInitMode('reset')">
           <div>
-            <div style="font-size: 1.05rem; font-weight: 800; margin-bottom: 0.25rem;">🎲 Tout supprimer & Tirage aléatoire</div>
+            <div style="font-size: 1.05rem; font-weight: 800; margin-bottom: 0.25rem;">Tout supprimer et tirage aléatoire</div>
             <div style="font-size: 0.82rem; font-weight: normal; opacity: 0.9; line-height: 1.35;">
               Efface tous les matchs et poules actuels de ce sport pour repartir à zéro avec un tirage aléatoire complet.
             </div>
@@ -56,14 +54,12 @@
     </div>
   </div>
 
-  <!-- MODAL DE CHANGEMENT DE MOT DE PASSE -->
-  <div id="pwd-modal" class="login-overlay hidden">
+  <!-- MODAL DE CHANGEMENT DE MOT DE PASSE (fermable par Échap) -->
+  <div id="pwd-modal" class="login-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pwd-modal-title" tabindex="-1">
     <div class="login-box" style="max-width: 440px; text-align: left;">
-      <div style="font-size: 2.5rem; text-align: center; margin-bottom: 0.5rem;">🔑</div>
-      <h2 style="text-align: center; margin-bottom: 0.35rem;">Changer le mot de passe</h2>
+      <h2 id="pwd-modal-title" style="text-align: center; margin-bottom: 0.35rem;">Changer le mot de passe</h2>
       <p style="text-align: center; color: var(--text-muted); font-size: 0.88rem; margin-bottom: 1.25rem;">
-        Le mot de passe administrateur se définit au <b>lancement du serveur</b>, côté serveur uniquement
-        (aucun mot de passe ni empreinte n'est jamais stocké dans le navigateur) :<br/>
+        Le mot de passe administrateur se définit uniquement au lancement du serveur :<br/>
         <code style="font-size:0.85rem;">ADMIN_PASSWORD=nouveau_mot_de_passe ./start.sh</code>
       </p>
 
@@ -81,7 +77,7 @@
   <!-- BARRE SUPÉRIEURE ADMIN - HORLOGE CENTRÉE -->
   <header class="top-bar">
     <div class="brand-title">
-      <h1>🛠️ TIP - Administration</h1>
+      <h1 style="text-transform: none;">TIP Administration</h1>
       <div id="admin-4g-chip" class="tunnel-status-chip offline" title="Statut de l'accès 4G extérieur pour les smartphones">
         <span class="status-dot"></span>
         <span id="admin-4g-text">4G : Local</span>
@@ -92,135 +88,155 @@
     <div id="admin-clock" class="clock-box">00:00:00</div>
 
     <div class="header-actions">
-      <button id="theme-toggle-btn" class="header-btn" onclick="toggleTheme()" title="Basculer entre le mode clair et le mode nuit">
-        <span class="btn-icon">☀️</span>
+      <button id="theme-toggle-btn" class="header-btn" onclick="toggleTheme()" title="Basculer entre le mode clair et le mode nuit" aria-label="Changer de thème">
+        <span class="btn-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="15" height="15"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></svg>
+        </span>
         <span class="btn-text">Thème</span>
       </button>
-      <button class="header-btn" onclick="openPasswordChangeModal()" title="Le mot de passe se change au lancement du serveur (ADMIN_PASSWORD=... ./start.sh)">
-        <span class="btn-icon">🔑</span>
+      <button class="header-btn" onclick="openPasswordChangeModal()" title="Le mot de passe se définit au lancement du serveur" aria-label="Mot de passe administrateur">
+        <span class="btn-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="15" height="15"><circle cx="7.5" cy="16.5" r="4.2"/><path d="M10.5 13.5 20 4"/><path d="M16 8l3.5 3.5"/></svg>
+        </span>
         <span class="btn-text">Mot de passe</span>
       </button>
-      <a href="index.html" target="_blank" class="header-btn btn-projector" title="Ouvrir l'affichage projeté dans un nouvel onglet">
-        <span class="btn-icon">📺</span>
+      <a href="index.html" target="_blank" rel="noopener" class="header-btn btn-projector" title="Ouvrir l'affichage projeté dans un nouvel onglet" aria-label="Ouvrir le vidéoprojecteur">
+        <span class="btn-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="15" height="15"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4"/><path d="M9 20h6"/></svg>
+        </span>
         <span class="btn-text">Vidéoprojecteur</span>
       </a>
-      <button class="header-btn btn-reset" onclick="confirmGlobalReset()" title="Réinitialiser tous les sports à zéro">
-        <span class="btn-icon">🗑️</span>
+      <a href="arbitre.html" target="_blank" rel="noopener" class="header-btn" title="Ouvrir l'interface arbitre dans un nouvel onglet (mot de passe arbitre requis)" aria-label="Ouvrir l'interface arbitre">
+        <span class="btn-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="15" height="15"><circle cx="12" cy="14" r="8"/><path d="M12 14l3-3"/><path d="M10 2h4"/></svg>
+        </span>
+        <span class="btn-text">Arbitre</span>
+      </a>
+      <button class="header-btn btn-reset" onclick="confirmGlobalReset()" title="Réinitialiser tous les sports à zéro" aria-label="Réinitialiser tous les sports">
+        <span class="btn-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="15" height="15"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>
+        </span>
         <span class="btn-text">Réinitialiser</span>
       </button>
-      <button class="header-btn btn-logout" onclick="handleAdminLogout()" title="Verrouiller l'accès administrateur">
-        <span class="btn-icon">🔒</span>
+      <button class="header-btn btn-logout" onclick="handleAdminLogout()" title="Verrouiller l'accès administrateur" aria-label="Déconnexion">
+        <span class="btn-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="15" height="15"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        </span>
         <span class="btn-text">Déconnexion</span>
       </button>
     </div>
   </header>
 
+  <!-- ANCRES DE NAVIGATION ADMIN -->
+  <nav class="admin-nav" aria-label="Sections administration">
+    <a class="admin-nav-link" href="#sports-section">Sports</a>
+    <a class="admin-nav-link" href="#broadcast-section">Diffusion</a>
+    <a class="admin-nav-link" href="#general-standings-section">Classement général</a>
+  </nav>
+
   <main class="admin-container">
     <!-- VUE 1 : TABLEAU DE BORD GÉNÉRAL (ACCUEIL ADMIN) -->
     <div id="dashboard-view">
-      <!-- Raccourci vers la Page Arbitre & Contrôle Vidéoprojecteur -->
-      <div class="admin-section" style="background: linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(15, 23, 42, 0.6) 100%); border: 2px solid var(--accent-primary, #38bdf8);">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
-          <div>
-            <h3 style="font-size:1.35rem; color:var(--text-main); display:flex; align-items:center; gap:0.5rem; margin:0;">
-              <span>⏱️</span> Marqueur de Score & Chrono Arbitre
-            </h3>
-            <p style="font-size:0.9rem; color:var(--text-muted); margin-top:0.3rem;">
-              Interface dédiée plein écran pour l'arbitre sur téléphone (couleurs auto par filière, +1 / -1, chronomètre, sonnerie automatique).
-            </p>
-          </div>
-          <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
-            <a href="arbitre.html" target="_blank" class="btn btn-primary" style="font-weight:800; display:inline-flex; align-items:center; gap:0.4rem; padding:0.65rem 1.2rem;">
-              <span>📱 Ouvrir la Page Arbitre</span>
-              <span style="font-size:1.1rem;">↗</span>
-            </a>
-            <button id="live-proj-btn" class="btn btn-warning" onclick="toggleLiveScoreProjection()" style="font-weight:800; padding:0.65rem 1.1rem;">
-              📺 Afficher sur Vidéoprojecteur
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Bannière Mode Pause Repas / Show POM-POM -->
-      <div class="admin-section" style="background: linear-gradient(135deg, rgba(250, 204, 21, 0.12) 0%, rgba(0,0,0,0.4) 100%); border: 2px solid #facc15;">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
-          <div>
-            <h3 style="font-size:1.35rem; color:#facc15; display:flex; align-items:center; gap:0.5rem;">
-              <span>📣</span> Mode Pause Repas & Show POM-POM (13h15)
-            </h3>
-            <p style="font-size:0.9rem; color:var(--text-muted); margin-top:0.25rem;">
-              Active un écran spécial jaune & noir <b>"Show POMPOM 13h15"</b> sur le vidéoprojecteur à la place du calendrier des matchs, tout en conservant le classement des filières lisible.
-            </p>
-          </div>
-          <button id="pompom-toggle-btn" class="btn btn-lg" onclick="togglePompomMode()">
-            <!-- Rempli dynamiquement par JS -->
-          </button>
-        </div>
-      </div>
-
-      <!-- Section Flash Info & Alertes en Direct (Vidéoprojecteur & Mobiles) -->
-      <div class="admin-section admin-flash-box">
-        <div class="admin-flash-header">
-          <div>
-            <h3 style="font-size:1.35rem; color:var(--text-main); display:flex; align-items:center; gap:0.5rem;">
-              <span>📢</span> Flash Info & Alerte Plein Écran
-            </h3>
-            <p style="font-size:0.88rem; color:var(--text-muted); margin-top:0.25rem;">
-              Diffuse instantanément un message prioritaire en plein écran sur le vidéoprojecteur et fait sonner/vibrer les smartphones connectés.
-            </p>
-          </div>
-          <div id="admin-flash-status-badge" class="admin-flash-status inactive">
-            <span>⚪ Flash Info Inactif</span>
-          </div>
-        </div>
-
-        <div style="display:flex; flex-direction:column; gap:0.85rem; margin-top:0.5rem;">
-          <textarea id="admin-flash-text" placeholder="Saisissez votre message prioritaire (ex: Équipes de Volleyball attendues immédiatement au COSEC)..." rows="2" style="width:100%; font-size:1.05rem; padding:0.75rem; border-radius:10px; background:var(--bg-input); color:var(--text-main); border:1px solid var(--border-color); font-family:var(--font-body);"></textarea>
-
-          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.85rem;">
-            <div style="display:flex; align-items:center; gap:0.6rem;">
-              <label style="font-size:0.88rem; font-weight:700; color:var(--text-muted);">Niveau d'alerte :</label>
-              <select id="admin-flash-level" style="padding:0.45rem 0.75rem; border-radius:8px;">
-                <option value="urgent">🚨 Urgence / Retard (Rouge)</option>
-                <option value="info">ℹ️ Information Générale (Bleu)</option>
-                <option value="call">📢 Appel Capitaines / Arbitres (Orange)</option>
-              </select>
-            </div>
-
-            <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-              <button class="btn" onclick="handleTestChime()" title="Tester le signal sonore dans votre navigateur">
-                🔔 Tester le Son
-              </button>
-              <button id="admin-flash-toggle-btn" class="btn btn-primary btn-lg" onclick="handleToggleFlashInfo()">
-                🚀 Activer & Projeter le Flash Info
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Sélection du sport -->
-      <div class="admin-section">
+      <!-- SPORTS -->
+      <section id="sports-section" class="admin-section" tabindex="-1">
         <div class="panel-header">
-          <h2>🏟️ Sélectionnez un Sport à Gérer</h2>
-          <span style="color:var(--text-muted); font-size:0.9rem;">Configurez les équipes, initialisez les poules, assignez les arbitres et saisissez les scores en direct.</span>
+          <div>
+            <h2>Sports</h2>
+            <span style="color:var(--text-muted); font-size:0.9rem;">Choisissez un sport pour saisir les scores ou gérer la compétition.</span>
+          </div>
         </div>
         <div id="sports-cards-grid" class="sports-grid">
           <!-- Injecté par JS -->
         </div>
-      </div>
+      </section>
 
-      <!-- Résumé du Classement Général côté Admin -->
-      <div class="admin-section">
+      <!-- DIFFUSION -->
+      <section id="broadcast-section" class="admin-section broadcast-group" tabindex="-1">
         <div class="panel-header">
           <div>
-            <h2>🏆 Aperçu du Classement Général des Filières (TIP)</h2>
+            <h2>Diffusion</h2>
+            <span style="color:var(--text-muted); font-size:0.9rem;">Contrôles du vidéoprojecteur, du mode POM-POM et des alertes.</span>
+          </div>
+        </div>
+
+        <div class="broadcast-block" id="broadcast-live-block">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+            <div>
+              <h3>Marqueur de score & chrono arbitre</h3>
+              <p class="broadcast-desc">Interface plein écran pour l'arbitre sur téléphone.</p>
+            </div>
+            <div style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap;">
+              <a href="arbitre.html" target="_blank" class="btn btn-primary" style="font-weight:800; display:inline-flex; align-items:center; gap:0.4rem; padding:0.65rem 1.2rem;">
+                <span>Ouvrir la page arbitre</span>
+                <span style="font-size:1.1rem;">↗</span>
+              </a>
+              <button id="live-proj-btn" class="btn btn-warning" onclick="toggleLiveScoreProjection()" style="font-weight:800; padding:0.65rem 1.1rem;">
+                Afficher sur vidéoprojecteur
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="broadcast-block" id="broadcast-pompom-block">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+            <div>
+              <h3>Mode pause repas & show POM-POM (13h15)</h3>
+              <p class="broadcast-desc">Active un écran spécial jaune et noir sur le vidéoprojecteur.</p>
+            </div>
+            <button id="pompom-toggle-btn" class="btn btn-lg" onclick="togglePompomMode()">
+              <!-- Rempli dynamiquement par JS -->
+            </button>
+          </div>
+        </div>
+
+        <div class="broadcast-block" id="broadcast-flash-block">
+          <div class="admin-flash-header">
+            <div>
+              <h3>Flash info & alerte plein écran</h3>
+              <p class="broadcast-desc">Diffuse un message prioritaire sur le vidéoprojecteur et les mobiles.</p>
+            </div>
+            <div id="admin-flash-status-badge" class="admin-flash-status inactive">
+              <span>Flash info inactif</span>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:0.85rem; margin-top:0.5rem;">
+            <textarea id="admin-flash-text" placeholder="Saisissez votre message prioritaire (ex: Équipes de Volleyball attendues immédiatement au COSEC)..." rows="2" style="width:100%; font-size:1.05rem; padding:0.75rem; border-radius:10px; background:var(--bg-input); color:var(--text-main); border:1px solid var(--border-color); font-family:var(--font-body);"></textarea>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.85rem;">
+              <div style="display:flex; align-items:center; gap:0.6rem;">
+                <label style="font-size:0.88rem; font-weight:700; color:var(--text-muted);">Niveau d'alerte :</label>
+                <select id="admin-flash-level" style="padding:0.45rem 0.75rem; border-radius:8px;">
+                  <option value="urgent">Urgence / Retard (Rouge)</option>
+                  <option value="info">Information générale (Bleu)</option>
+                  <option value="call">Appel capitaines / arbitres (Orange)</option>
+                </select>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                <button class="btn" onclick="handleTestChime()" title="Tester le signal sonore dans votre navigateur">
+                  Tester le son
+                </button>
+                <button id="admin-flash-toggle-btn" class="btn btn-primary btn-lg" onclick="handleToggleFlashInfo()">
+                  Publier le flash info
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CLASSEMENT GÉNÉRAL -->
+      <section id="general-standings-section" class="admin-section" tabindex="-1">
+        <div class="panel-header">
+          <div>
+            <h2>Classement général</h2>
             <span style="font-size:0.85rem; color:var(--text-muted);">
               Barème : 8ème (1 pt) • Quart (2 pts) • Demi (4 pts) • Finale (5 pts) • Vainqueur (7 pts) • Poules : 3G / 2N / 1P
             </span>
           </div>
           <button id="admin-standings-view-toggle-btn" class="btn" type="button" onclick="toggleAdminStandingsView()">
-            📈 Voir le graphique
+            Voir le graphique
           </button>
         </div>
         <div id="admin-standings-table-view">
@@ -231,12 +247,12 @@
                   <th style="width:50px;">Rang</th>
                   <th>Filière</th>
                   <th>Couleur</th>
-                  <th style="white-space:nowrap;">Foot ⚽</th>
-                  <th style="white-space:nowrap;">Basket 🏀</th>
-                  <th style="white-space:nowrap;">Volley 🏐</th>
-                  <th style="white-space:nowrap;">Relais 🏃</th>
-                  <th style="white-space:nowrap;">Dodgeball 🤾</th>
-                  <th style="text-align:right; white-space:nowrap;">Total Points</th>
+                  <th style="white-space:nowrap;">Foot</th>
+                  <th style="white-space:nowrap;">Basket</th>
+                  <th style="white-space:nowrap;">Volley</th>
+                  <th style="white-space:nowrap;">Relais</th>
+                  <th style="white-space:nowrap;">Dodgeball</th>
+                  <th style="text-align:right; white-space:nowrap;">Total points</th>
                 </tr>
               </thead>
               <tbody id="admin-standings-tbody"></tbody>
@@ -248,30 +264,33 @@
             <!-- Injecté par JS -->
           </div>
         </div>
-      </div>
+      </section>
     </div>
 
     <!-- VUE 2 : PAGE DÉTAILLÉE D'UN SPORT -->
     <div id="sport-detail-view" class="hidden">
-      <div style="margin-bottom: 1.25rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
-        <button class="btn" onclick="backToDashboard()">⬅️ Retour au tableau de bord</button>
-        <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
-          <button class="btn" onclick="toggleSettingsPanel()">⚙️ Paramètres & Équipes engagées</button>
-          <button class="btn btn-primary" onclick="handleInitializeSport()">🎲 Initialiser (Tirage aléatoire)</button>
-          <button class="btn btn-success" onclick="handleExportExcel()">📥 Télécharger planning (.xls)</button>
+      <nav class="sport-nav" aria-label="Sections du sport">
+        <div class="sport-nav-breadcrumb">
+          <button class="btn btn-sm" onclick="backToDashboard()">← Sports</button>
+          <span id="sport-nav-current"></span>
         </div>
-      </div>
-
-      <!-- En-tête du sport sélectionné -->
-      <div class="admin-section" id="sport-header-banner">
-        <!-- Injecté par JS -->
-      </div>
+        <div class="sport-nav-links">
+          <a class="sport-nav-link" href="#pools-matches-section">Matchs et scores</a>
+          <a class="sport-nav-link" href="#pools-composition-section">Composition des poules</a>
+          <a class="sport-nav-link" href="#knockout-matches-section">Phases finales</a>
+          <a class="sport-nav-link" href="#team-points-section">Points par équipe</a>
+        </div>
+        <div class="sport-nav-actions">
+          <button class="btn" onclick="toggleSettingsPanel()">Paramètres</button>
+          <button class="btn btn-success" onclick="handleExportExcel()">Exporter .xls</button>
+        </div>
+      </nav>
 
       <!-- PANNEAU PARAMÈTRES (Masqué/Affiché via le bouton "Paramètres") -->
       <div id="sport-settings-panel" class="admin-section hidden">
         <div class="panel-header">
-          <h2>⚙️ Paramètres du Sport & Équipes Présentes</h2>
-          <button class="btn btn-sm" onclick="toggleSettingsPanel()">Fermer ✖</button>
+          <h2>Paramètres du sport & équipes présentes</h2>
+          <button class="btn btn-sm" onclick="toggleSettingsPanel()">Fermer</button>
         </div>
 
         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:1rem; margin-bottom:1.5rem; padding-bottom:1.25rem; border-bottom:1px solid var(--border-color);">
@@ -295,8 +314,8 @@
 
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h3 style="font-size:1.05rem;">✅ Cocher / Décocher les équipes engagées par filière</h3>
-            <p style="font-size:0.85rem; color:var(--text-muted);">Décochez les équipes absentes avant de cliquer sur <b>"Initialiser"</b> pour recalculer les poules et l'arbre.</p>
+            <h3 style="font-size:1.05rem;">Cocher / décocher les équipes engagées par filière</h3>
+            <p style="font-size:0.85rem; color:var(--text-muted);">Décochez les équipes absentes avant d'initialiser.</p>
           </div>
           <div style="display:flex; gap:0.5rem;">
             <button class="btn btn-sm" onclick="setAllTeamsActive(true)">Tout cocher</button>
@@ -307,61 +326,63 @@
         <div id="teams-Checkboxes-container" class="teams-check-grid"></div>
       </div>
 
-      <!-- SECTION GESTION & COMPOSITION MANUELLE DES POULES -->
-      <div id="pools-composition-section" class="admin-section">
+      <!-- SECTION MATCHS PAR POULE (SÉPARÉS CLAIREMENT PAR POULE) -->
+      <section id="pools-matches-section" class="admin-section" tabindex="-1">
         <div class="panel-header">
           <div>
-            <h2>🎯 Composition Manuelle des Poules & Séries</h2>
-            <span style="font-size:0.85rem; color:var(--text-muted);">
-              Composez vos poules librement, puis cliquez sur <b>"⚡ Compléter & Mettre en forme"</b> pour générer automatiquement tous les matchs et les horaires.
-            </span>
+            <h2>Matchs et scores</h2>
+            <span style="font-size:0.85rem; color:var(--text-muted);">Saisissez les résultats des poules.</span>
           </div>
-          <button class="btn btn-sm" id="toggle-composer-btn" onclick="togglePoolComposer()">Afficher ▾</button>
         </div>
-        <div id="pool-composer-content">
-          <!-- Injecté dynamiquement par renderPoolComposer() -->
+        <div id="poules-blocks-container" class="poules-container-admin">
+          <!-- Injecté par JS : une boîte distincte par poule avec son classement agrandi et ses matchs -->
         </div>
-      </div>
-
-      <!-- BANNIÈRE ACTION : REMPLIR LES PHASES FINALES APRÈS LES POULES -->
-      <div id="knockout-action-banner-container">
-        <!-- Injecté par JS si sport initialisé -->
-      </div>
+      </section>
 
       <!-- BARRE DE DÉCALAGE HORAIRE RAPIDE PAR SPORT & PAR TERRAIN -->
       <div id="sport-shift-toolbar-container">
         <!-- Injecté dynamiquement par JS -->
       </div>
 
-      <!-- SECTION MATCHS PAR POULE (SÉPARÉS CLAIREMENT PAR POULE) -->
-      <div id="pools-matches-section" class="admin-section">
+      <!-- SECTION GESTION & COMPOSITION MANUELLE DES POULES -->
+      <section id="pools-composition-section" class="admin-section" tabindex="-1">
         <div class="panel-header">
-          <h2>📋 Matchs de Poule & Classements Séparés</h2>
-          <span style="font-size:0.85rem; color:var(--text-muted);">Classements de poule grand format & calendriers dédiés</span>
+          <div>
+            <h2>Composition des poules</h2>
+            <span style="font-size:0.85rem; color:var(--text-muted);">Composez vos poules librement.</span>
+          </div>
+          <button class="btn btn-sm" id="toggle-composer-btn" onclick="togglePoolComposer()">Afficher ▾</button>
         </div>
-        <div id="poules-blocks-container" class="poules-container-admin">
-          <!-- Injecté par JS : une boîte distincte par poule avec son classement agrandi et ses matchs -->
+        <div id="pool-composer-content">
+          <!-- Injecté dynamiquement par renderPoolComposer() -->
         </div>
+      </section>
+
+      <!-- BANNIÈRE ACTION : REMPLIR LES PHASES FINALES APRÈS LES POULES -->
+      <div id="knockout-action-banner-container">
+        <!-- Injecté par JS si sport initialisé -->
       </div>
 
       <!-- SECTION PHASES FINALES (SÉPARÉE CLAIREMENT) -->
-      <div id="knockout-matches-section" class="admin-section">
+      <section id="knockout-matches-section" class="admin-section" tabindex="-1">
         <div class="panel-header">
-          <h2>🏆 Tableau des Phases Finales (Quarts, Demis & Finales)</h2>
-          <span style="font-size:0.85rem; color:var(--text-muted);">Affiché sur le vidéoprojecteur dès que les 2 équipes sont qualifiées</span>
+          <div>
+            <h2>Phases finales</h2>
+            <span style="font-size:0.85rem; color:var(--text-muted);">Tableau final affiché dès que les qualifiés sont connus.</span>
+          </div>
         </div>
         <div id="knockout-matches-container">
           <!-- Injecté par JS -->
         </div>
-      </div>
+      </section>
 
       <!-- SECTION ATTRIBUTION DES POINTS PAR ÉQUIPE (SANS COLONNE STATUT) -->
-      <div class="admin-section">
+      <section id="team-points-section" class="admin-section" tabindex="-1">
         <div class="panel-header">
-          <h2>🏅 Stade Atteint & Points Gagnés par Équipe</h2>
-          <span style="font-size:0.85rem; color:var(--text-muted);">
-            Barème final : 8ème (1 pt) • Quart (2 pts) • Demi (4 pts) • Finale (5 pts) • Vainqueur (7 pts). Poules : 3 pts victoire, 2 pts nul, 1 pt défaite.
-          </span>
+          <div>
+            <h2>Points par équipe</h2>
+            <span style="font-size:0.85rem; color:var(--text-muted);">Stade atteint et points gagnés par équipe.</span>
+          </div>
         </div>
         <div style="overflow-x:auto;">
           <table class="admin-table">
@@ -369,22 +390,67 @@
               <tr>
                 <th>Équipe</th>
                 <th>Filière</th>
-                <th>Stade Atteint</th>
-                <th>Points du Stade</th>
-                <th>Bonus / Ajustement</th>
-                <th style="text-align:right;">Total Équipe</th>
+                <th>Stade atteint</th>
+                <th>Points du stade</th>
+                <th>Bonus / ajustement</th>
+                <th style="text-align:right;">Total équipe</th>
               </tr>
             </thead>
             <tbody id="admin-stages-tbody"></tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   </main>
 
   <script src="app.js"></script>
   <script>
     let currentSportId = null;
+
+    // ======================================================================
+    // ACCESSIBILITÉ DES MODALES : piège de focus, Échap et inert
+    // (le login est obligatoire : Échap ne le ferme jamais)
+    // ======================================================================
+    function tipModalFocusables(container) {
+      return Array.from(container.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )).filter(el => el.getClientRects().length > 0);
+    }
+
+    function trapTabInModal(e, modal) {
+      if (e.key !== "Tab") return;
+      const focusables = tipModalFocusables(modal);
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      if (e.shiftKey) {
+        if (active === first || active === modal || !modal.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last || !modal.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    // Rend l'arrière-plan (barre, nav, contenu) inaccessible au clavier et
+    // aux lecteurs d'écran tant que le login est affiché.
+    function setLoginBackdropInert(locked) {
+      [document.querySelector("header.top-bar"), document.querySelector("nav.admin-nav"), document.querySelector("main.admin-container")]
+        .forEach(el => { if (el) el.inert = locked; });
+    }
+
+    function focusFirstInModal(modalId) {
+      const modalEl = document.getElementById(modalId);
+      if (!modalEl) return;
+      const first = tipModalFocusables(modalEl)[0];
+      (first || modalEl).focus();
+    }
+
+    let pwdModalOpener = null;
+    let initModalOpener = null;
 
     // 1. Authentification : le mot de passe est vérifié PAR LE SERVEUR (POST /api/login),
     // qui renvoie le jeton de session utilisé ensuite pour toutes les écritures API.
@@ -396,6 +462,7 @@
       loginAdmin(val).then(res => {
         if (res.success) {
           document.getElementById("login-modal").classList.add("hidden");
+          setLoginBackdropInert(false);
           document.getElementById("admin-pwd-input").value = "";
           startAdminScoreHistoryRecorder();
           renderDashboard();
@@ -410,26 +477,40 @@
       const token = sessionStorage.getItem("ADMIN_AUTH_TOKEN");
       if (token) {
         document.getElementById("login-modal").classList.add("hidden");
+        setLoginBackdropInert(false);
       } else {
         document.getElementById("login-modal").classList.remove("hidden");
+        setLoginBackdropInert(true);
+        setTimeout(() => document.getElementById("admin-pwd-input").focus(), 50);
       }
     }
 
     function handleAdminLogout() {
       sessionStorage.removeItem("ADMIN_AUTH_TOKEN");
       document.getElementById("login-modal").classList.remove("hidden");
+      setLoginBackdropInert(true);
+      document.getElementById("admin-pwd-input").value = "";
+      setTimeout(() => document.getElementById("admin-pwd-input").focus(), 50);
     }
 
     function openPasswordChangeModal() {
-      document.getElementById("pwd-modal").classList.remove("hidden");
-      document.getElementById("new-pwd-input").value = "";
-      document.getElementById("confirm-pwd-input").value = "";
+      const modalEl = document.getElementById("pwd-modal");
+      if (!modalEl) return;
+      pwdModalOpener = document.activeElement;
+      modalEl.classList.remove("hidden");
+      const newInput = document.getElementById("new-pwd-input");
+      if (newInput) newInput.value = "";
+      const confirmInput = document.getElementById("confirm-pwd-input");
+      if (confirmInput) confirmInput.value = "";
       document.getElementById("pwd-change-error").style.display = "none";
       document.getElementById("pwd-change-success").style.display = "none";
+      focusFirstInModal("pwd-modal");
     }
 
     function closePasswordChangeModal() {
       document.getElementById("pwd-modal").classList.add("hidden");
+      if (pwdModalOpener && pwdModalOpener.isConnected) pwdModalOpener.focus();
+      pwdModalOpener = null;
     }
 
     function handlePasswordChangeSubmit(e) {
@@ -444,9 +525,23 @@
     // 2. Navigation
     function openSportDetail(sportId) {
       currentSportId = sportId;
+      dashboardScrollY = window.scrollY || window.pageYOffset || 0;
       document.getElementById("dashboard-view").classList.add("hidden");
       document.getElementById("sport-detail-view").classList.remove("hidden");
+      window.scrollTo(0, 0);
       renderSportDetail();
+    }
+
+    function enterSportScores(sportId) {
+      openSportDetail(sportId);
+      // Après le rendu, scroller jusqu'à la section des matchs et mettre le focus
+      setTimeout(() => {
+        const el = document.getElementById("pools-matches-section");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          el.focus({ preventScroll: true });
+        }
+      }, 0);
     }
 
     function backToDashboard() {
@@ -454,6 +549,7 @@
       document.getElementById("sport-detail-view").classList.add("hidden");
       document.getElementById("dashboard-view").classList.remove("hidden");
       renderDashboard();
+      window.scrollTo(0, dashboardScrollY);
     }
 
     function toggleSettingsPanel() {
@@ -469,6 +565,8 @@
       renderDashboard();
     }
 
+    let dashboardScrollY = 0;
+
     // 4. Rendu Dashboard
     function renderDashboard() {
       const state = loadState();
@@ -481,10 +579,10 @@
       const pompomBtn = document.getElementById("pompom-toggle-btn");
       if (state.pompomMode) {
         pompomBtn.className = "btn btn-lg btn-danger";
-        pompomBtn.innerHTML = "🔴 Désactiver le Show POM-POM (Remettre les matchs)";
+        pompomBtn.innerHTML = "Désactiver le Show POM-POM (remettre les matchs)";
       } else {
         pompomBtn.className = "btn btn-lg btn-warning";
-        pompomBtn.innerHTML = "📣 Activer le Show POM-POM & Pause Repas (13h15)";
+        pompomBtn.innerHTML = "Activer le Show POM-POM et la pause repas (13h15)";
       }
 
       // Mise à jour de la boîte Flash Info
@@ -497,19 +595,19 @@
       if (flashBadge) {
         if (isFlashActive) {
           flashBadge.className = "admin-flash-status active";
-          flashBadge.innerHTML = "🔴 ACTIF SUR LE VIDÉOPROJECTEUR";
+          flashBadge.innerHTML = "Flash info actif sur le vidéoprojecteur";
         } else {
           flashBadge.className = "admin-flash-status inactive";
-          flashBadge.innerHTML = "⚪ Flash Info Inactif";
+          flashBadge.innerHTML = "Flash info inactif";
         }
       }
       if (flashToggleBtn) {
         if (isFlashActive) {
           flashToggleBtn.className = "btn btn-danger btn-lg";
-          flashToggleBtn.innerHTML = "🛑 Désactiver le Flash Info";
+          flashToggleBtn.innerHTML = "Désactiver le flash info";
         } else {
           flashToggleBtn.className = "btn btn-primary btn-lg";
-          flashToggleBtn.innerHTML = "🚀 Activer & Projeter le Flash Info";
+          flashToggleBtn.innerHTML = "Publier le flash info";
         }
       }
       if (state.flashInfo && state.flashInfo.message && flashTextInput && document.activeElement !== flashTextInput) {
@@ -519,55 +617,67 @@
         flashLevelSelect.value = state.flashInfo.level;
       }
 
-      // Cartes de sport
+      // Lignes de sport (une ligne = un sport)
       const grid = document.getElementById("sports-cards-grid");
-      grid.innerHTML = Object.values(state.sports).map(sport => {
+      grid.innerHTML = `
+        <div class="sport-row-head">
+          <span>Sport</span>
+          <span>Créneau</span>
+          <span>Terrains</span>
+          <span>Progression</span>
+          <span></span>
+        </div>
+      ` + Object.values(state.sports).map(sport => {
         const theme = getSportTheme(sport.id);
-        const activeCount = sport.teams.filter(t => t.active).length;
         const totalMatches = sport.matches.length;
         const finishedMatches = sport.matches.filter(m =>
           m.isRace ? Object.keys(m.raceResults || {}).length > 0 : (m.scoreA !== null && m.scoreB !== null && m.scoreA !== "" && m.scoreB !== "")
         ).length;
 
-        const statusBadge = sport.initialized
-          ? `<span style="background:rgba(16,185,129,0.18); color:var(--accent-success); padding:0.25rem 0.65rem; border-radius:999px; font-size:0.8rem; font-weight:800;">${finishedMatches}/${totalMatches} matchs terminés</span>`
-          : `<span style="background:rgba(245,158,11,0.18); color:var(--accent-warning); padding:0.25rem 0.65rem; border-radius:999px; font-size:0.8rem; font-weight:800;">Non initialisé</span>`;
+        const statusText = sport.initialized ? "Initialisé" : "Non initialisé";
 
         return `
-          <div class="sport-card" style="border-left: 6px solid ${theme.color};" onclick="openSportDetail('${escapeJsString(sport.id)}')">
-            <div class="sport-card-header">
-              <span class="sport-card-title">${escapeHtml(sport.icon)} ${escapeHtml(sport.name)}</span>
-              ${statusBadge}
+          <div class="sport-row" style="--sport-color: ${theme.color};" data-sport-id="${escapeJsString(sport.id)}">
+            <div class="sport-row-main">
+              <span class="sport-row-name">${escapeHtml(sport.name)}</span>
+              <span class="sport-row-status">${statusText}</span>
             </div>
-            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.75rem;">
-              🕒 Créneau : <b>${escapeHtml(sport.startTime)} - ${escapeHtml(sport.endTime)}</b><br/>
-              🏟️ Terrains : <b>${escapeHtml((sport.pitchNames || []).join(", "))}</b><br/>
-              👥 Équipes actives : <b>${activeCount}/${sport.teams.length}</b>
-            </p>
-            <div style="font-size:0.85rem; color:${theme.color}; font-weight:800;">Gérer les poules, matchs & scores ➔</div>
+            <div class="sport-row-col" data-label="Créneau">${escapeHtml(sport.startTime)} - ${escapeHtml(sport.endTime)}</div>
+            <div class="sport-row-col" data-label="Terrains">${escapeHtml((sport.pitchNames || []).join(" & "))}</div>
+            <div class="sport-row-col sport-row-progress" data-label="Progression">${finishedMatches}/${totalMatches} matchs</div>
+            <div class="sport-row-actions">
+              <button class="btn btn-primary" onclick="enterSportScores('${escapeJsString(sport.id)}')"
+                title="Saisir les scores de ${escapeHtml(sport.name)}">
+                Saisir les scores
+              </button>
+              <button class="btn" onclick="openSportDetail('${escapeJsString(sport.id)}')"
+                title="Gérer ${escapeHtml(sport.name)}">
+                Gérer
+              </button>
+            </div>
           </div>
         `;
       }).join("");
 
-      // Classement Général
+      // Classement général
       const standings = computeGlobalFiliereStandings(state);
       const tbody = document.getElementById("admin-standings-tbody");
       tbody.innerHTML = standings.map((f, idx) => `
         <tr>
-          <td style="font-weight:900; font-size:1.1rem;">#${idx + 1}</td>
+          <td class="standings-rank ${idx < 3 ? "rank-top" : ""}">${idx + 1}</td>
           <td>
-            <span class="filiere-pill" style="border-left-color: ${f.hex};">
-              <span class="filiere-dot" style="background-color: ${f.hex};"></span>
-              <span>${f.name}</span>
+            <span class="table-name-cell">
+              <span class="table-swatch" style="background-color: ${f.hex};"></span>
+              <span>${escapeHtml(f.name)}</span>
             </span>
           </td>
-          <td>${f.colorName}</td>
-          <td><b>${f.bySport.foot || 0}</b> pts</td>
-          <td><b>${f.bySport.basket || 0}</b> pts</td>
-          <td><b>${f.bySport.volley || 0}</b> pts</td>
-          <td><b>${f.bySport.relais || 0}</b> pts</td>
-          <td><b>${f.bySport.dodgeball || 0}</b> pts</td>
-          <td style="text-align:right; font-weight:900; font-size:1.25rem; color:${f.hex};">${f.totalPoints} pts</td>
+          <td class="standings-muted">${escapeHtml(f.colorName)}</td>
+          <td class="num-cell">${f.bySport.foot || 0}<span class="num-unit">pts</span></td>
+          <td class="num-cell">${f.bySport.basket || 0}<span class="num-unit">pts</span></td>
+          <td class="num-cell">${f.bySport.volley || 0}<span class="num-unit">pts</span></td>
+          <td class="num-cell">${f.bySport.relais || 0}<span class="num-unit">pts</span></td>
+          <td class="num-cell">${f.bySport.dodgeball || 0}<span class="num-unit">pts</span></td>
+          <td class="num-cell total-cell">${f.totalPoints}<span class="num-unit">pts</span></td>
         </tr>
       `).join("");
 
@@ -584,18 +694,9 @@
       const activeTeams = sport.teams.filter(t => t.active);
 
       // Bannière d'en-tête
-      document.getElementById("sport-header-banner").innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
-          <div>
-            <h2 style="font-size:1.75rem; color:${theme.color};">${escapeHtml(sport.icon)} ${escapeHtml(sport.name)}</h2>
-            <p style="color:var(--text-muted); font-size:0.9rem; margin-top:0.25rem;">📌 Terrains officiels : <b>${escapeHtml((sport.pitchNames || []).join(" & "))}</b> • ${escapeHtml(sport.excelNote)}</p>
-          </div>
-          <div style="text-align:right;">
-            <div style="font-size:0.95rem;">Équipes engagées : <b>${activeTeams.length}</b> / ${sport.teams.length}</div>
-            <div style="font-size:0.85rem; color:var(--text-muted);">Horaires : ${escapeHtml(sport.startTime)} à ${escapeHtml(sport.endTime)}</div>
-          </div>
-        </div>
-      `;
+      // Mise à jour du breadcrumb
+      const navCurrent = document.getElementById("sport-nav-current");
+      if (navCurrent) navCurrent.textContent = " / " + escapeHtml(sport.name);
 
       // Paramètres
       document.getElementById("cfg-start-time").value = sport.startTime;
@@ -623,14 +724,14 @@
           <div class="knockout-action-banner">
             <div>
               <h3 style="font-size:1.15rem; color:var(--text-main); margin-bottom:0.2rem;">
-                🎯 Remplissage automatique des Phases Finales
+                Remplissage automatique des phases finales
               </h3>
               <p style="font-size:0.85rem; color:var(--text-muted);">
-                Dès que les matchs de poule sont terminés, cliquez sur ce bouton pour qualifier automatiquement les meilleures équipes dans l'arbre final (Quarts/Demis).
+                Qualifie automatiquement les meilleures équipes de poule dans l'arbre final.
               </p>
             </div>
             <button class="btn btn-primary btn-lg" onclick="handleFillKnockoutClick()">
-              ⚡ Clôturer les Poules & Remplir les Phases Finales
+              Clôturer les poules et remplir les phases finales
             </button>
           </div>
         `;
@@ -649,7 +750,7 @@
           shiftContainer.innerHTML = `
             <div class="shift-schedule-bar">
               <div class="shift-title">
-                <span>⏱️ Décalage horaire global (${escapeHtml(sport.name)}) :</span>
+                <span>Décalage horaire global (${escapeHtml(sport.name)}) :</span>
                 <span style="font-size:0.8rem; font-weight:normal; color:var(--text-muted);">(décale automatiquement les matchs restants)</span>
               </div>
               <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
@@ -684,14 +785,15 @@
       if (!sport.pools || sport.pools.length === 0) {
         poulesBlocksContainer.innerHTML = `
           <div style="color:var(--text-muted); padding:1.5rem; text-align:center; background:var(--bg-input); border-radius:12px; border:1px solid var(--border-color);">
-            Aucune poule n'est encore configurée. Utilisez la section <b>"🎯 Composition Manuelle des Poules"</b> ci-dessus pour créer vos poules, puis cliquez sur <b>"Compléter & Mettre en forme"</b>.
+            Aucune poule n'est encore configurée. Composez vos poules dans la section « Composition des poules », puis complétez les matchs et les horaires.
           </div>
         `;
       } else if (totalPoolMatches === 0) {
+        const poolsCount = sport.pools.length;
+        const poolsNames = sport.pools.map(p => p.name).join(" et ");
         poulesBlocksContainer.innerHTML = `
           <div style="color:var(--accent-warning); padding:1.5rem; text-align:center; background:rgba(245,158,11,0.08); border-radius:12px; border:1px solid rgba(245,158,11,0.3);">
-            👉 Vos poules sont configurées (<b>${escapeHtml(sport.pools.map(p => p.name).join(", "))}</b>).<br/>
-            Cliquez sur le bouton vert <b>"⚡ Compléter & Mettre en forme (Matchs & Horaires)"</b> ci-dessus pour générer automatiquement les rencontres et planifier les horaires !
+            ${escapeHtml(poolsNames)} configurée${poolsCount > 1 ? "s" : ""}. Complétez les matchs et les horaires pour continuer.
           </div>
         `;
       } else if (sport.type === "race") {
@@ -700,24 +802,26 @@
           const poolMatches = sport.matches.filter(m => m.phase === "POULE" && (m.poolId === pool.id || m.label.includes(pool.name)));
           const rows = poolMatches.map(m => renderRaceRow(m, activeTeams)).join("");
           return `
-            <div class="poule-block-card">
+            <div class="poule-block-card" style="--sport-color: ${theme.color};">
               <div class="poule-header-bar">
-                <h3>🏃 ${escapeHtml(pool.name)}</h3>
-                <span style="font-size:0.85rem; color:var(--text-muted);">${(pool.teamIds || []).length} équipes</span>
+                <h3>${escapeHtml(pool.name)}</h3>
+                <span class="poule-meta">${(pool.teamIds || []).length} équipes</span>
               </div>
-              <table class="admin-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Heure</th>
-                    <th>Course</th>
-                    <th>Terrain</th>
-                    <th colspan="2">Couloirs & Résultats</th>
-                    <th>Arbitre</th>
-                  </tr>
-                </thead>
-                <tbody>${rows}</tbody>
-              </table>
+              <div class="table-scroll">
+                <table class="admin-table admin-match-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Heure</th>
+                      <th>Course</th>
+                      <th>Terrain</th>
+                      <th colspan="2">Couloirs &amp; résultats</th>
+                      <th>Arbitre</th>
+                    </tr>
+                  </thead>
+                  <tbody>${rows}</tbody>
+                </table>
+              </div>
             </div>
           `;
         }).join("");
@@ -728,24 +832,26 @@
           const poolRankings = computePoolStandings(sport, pool.id);
           const poolMatches = sport.matches.filter(m => m.phase === "POULE" && m.poolId === pool.id);
 
-          // Lignes du classement grand format avec mise en valeur dynamique des qualifiés
+          // Lignes du classement de la poule : texte plat, filets 1px, top 3 en plus gras
           const rankingRows = poolRankings.map((st, i) => {
             const f = getFiliereById(st.filiereId);
             const isQualified = i < qPerPool; // Position qualificative dynamique
             return `
-              <tr style="${isQualified ? 'background:rgba(16,185,129,0.08);' : ''}">
-                <td class="poule-rank-num" style="${isQualified ? 'color:var(--accent-success);' : ''}">
+              <tr>
+                <td class="standings-rank ${i < 3 ? "rank-top" : ""}">
                   ${i + 1}
                 </td>
                 <td>
-                  <span class="filiere-dot" style="background:${f.hex}; margin-right:8px; width:14px; height:14px;"></span>
-                  <span class="poule-team-name">${escapeHtml(st.name)}</span>
-                  ${isQualified ? '<span style="font-size:0.75rem; color:var(--accent-success); font-weight:800; margin-left:6px;">(Qualifié)</span>' : ''}
+                  <span class="table-name-cell">
+                    <span class="table-swatch" style="background-color:${f.hex};"></span>
+                    <span class="poule-team-name">${escapeHtml(st.name)}</span>
+                    ${isQualified ? '<span class="poule-qualified-note">(Qualifié)</span>' : ''}
+                  </span>
                 </td>
-                <td style="text-align:center; font-weight:800; font-size:1.05rem;">${st.played}</td>
+                <td class="num-cell">${st.played}</td>
                 <td class="poule-pts-large">${st.pts}</td>
-                <td style="text-align:center; font-weight:800; font-size:1.05rem;">${st.diff > 0 ? "+" + st.diff : st.diff}</td>
-                <td style="text-align:center; font-size:0.95rem; font-weight:700; color:var(--text-muted);">${st.goalsFor}:${st.goalsAgainst}</td>
+                <td class="num-cell">${st.diff > 0 ? "+" + st.diff : st.diff}</td>
+                <td class="goals-cell">${st.goalsFor}:${st.goalsAgainst}</td>
               </tr>
             `;
           }).join("");
@@ -753,59 +859,57 @@
           const matchRows = poolMatches.map(m => renderMatchRow1v1(m, activeTeams)).join("");
 
           return `
-            <div class="poule-block-card">
+            <div class="poule-block-card" style="--sport-color: ${theme.color};">
               <div class="poule-header-bar">
-                <h3 style="color:var(--text-main); display:flex; align-items:center; gap:0.5rem;">
-                  <span>🔵</span> ${escapeHtml(pool.name)}
-                </h3>
-                <span style="font-size:0.9rem; color:var(--text-muted); font-weight:700;">
-                  ${(pool.teamIds || []).length} équipes • ${poolMatches.length} matchs de poule
+                <h3>${escapeHtml(pool.name)}</h3>
+                <span class="poule-meta">
+                  ${(pool.teamIds || []).length} équipes, ${poolMatches.length} matchs de poule
                 </span>
               </div>
 
-              <!-- Layout : Classement de la poule en plus gros à gauche + Matchs à droite -->
+              <!-- Layout : matchs en colonne fluide à gauche, classement de la poule en colonne latérale à droite -->
               <div class="poule-two-cols-layout">
-                <!-- Tableau Classement de la Poule (EN PLUS GROS) -->
-                <div class="poule-standings-card-large">
-                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
-                    <h4 style="font-size:1.25rem; font-weight:900; color:var(--text-main);">
-                      📊 Classement ${escapeHtml(pool.name)}
-                    </h4>
-                    <span style="font-size:0.8rem; color:var(--accent-success); font-weight:800; background:rgba(16,185,129,0.15); padding:0.2rem 0.5rem; border-radius:6px;">
-                      🟢 Top ${qPerPool} qualifié${qPerPool > 1 ? 's' : ''}
-                    </span>
-                  </div>
-                  <table class="poule-standings-table-large">
-                    <thead>
-                      <tr>
-                        <th style="width:36px; text-align:center;">#</th>
-                        <th>Équipe</th>
-                        <th style="text-align:center;">J</th>
-                        <th style="text-align:center;">Pts</th>
-                        <th style="text-align:center;">Diff</th>
-                        <th style="text-align:center;">BP:BC</th>
-                      </tr>
-                    </thead>
-                    <tbody>${rankingRows}</tbody>
-                  </table>
-                </div>
-
-                <!-- Matchs de cette Poule -->
-                <div style="overflow-x:auto;">
-                  <table class="admin-table">
+                <!-- Matchs de cette Poule (colonne principale) -->
+                <div class="table-scroll">
+                  <table class="admin-table admin-match-table">
                     <thead>
                       <tr>
                         <th>#</th>
                         <th>Heure</th>
                         <th>Terrain</th>
                         <th>Équipe A</th>
-                        <th style="text-align:center;">Score</th>
+                        <th>Score</th>
                         <th>Équipe B</th>
                         <th>Arbitre</th>
                       </tr>
                     </thead>
                     <tbody>${matchRows}</tbody>
                   </table>
+                </div>
+
+                <!-- Classement de la Poule (colonne latérale 320-360px) -->
+                <div class="poule-standings-card-large">
+                  <div class="poule-standings-head">
+                    <h4>Classement ${escapeHtml(pool.name)}</h4>
+                    <span class="poule-side-note">
+                      Top ${qPerPool} qualifié${qPerPool > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div class="table-scroll">
+                    <table class="poule-standings-table-large">
+                      <thead>
+                        <tr>
+                          <th style="width:36px;">#</th>
+                          <th>Équipe</th>
+                          <th>J</th>
+                          <th>Pts</th>
+                          <th>Diff</th>
+                          <th>BP:BC</th>
+                        </tr>
+                      </thead>
+                      <tbody>${rankingRows}</tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
@@ -826,16 +930,16 @@
         }).join("");
 
         knockoutContainer.innerHTML = `
-          <div style="overflow-x:auto;">
-            <table class="admin-table">
+          <div class="table-scroll">
+            <table class="admin-table admin-match-table">
               <thead>
                 <tr>
                   <th>#</th>
                   <th>Heure</th>
-                  <th>Phase / Match</th>
+                  <th>Phase / match</th>
                   <th>Terrain</th>
                   <th>Équipe A</th>
-                  <th style="text-align:center;">Score</th>
+                  <th>Score</th>
                   <th>Équipe B</th>
                   <th>Arbitre</th>
                 </tr>
@@ -856,15 +960,10 @@
 
         return `
           <tr style="${!team.active ? 'opacity:0.4;' : ''}">
-            <td><b>${escapeHtml(team.name)}</b></td>
+            <td><span class="table-name-cell"><span class="table-swatch" style="background-color:${f.hex};"></span>${escapeHtml(team.name)}</span></td>
+            <td class="standings-muted">${escapeHtml(f.name)}</td>
             <td>
-              <span class="filiere-pill" style="border-left-color:${f.hex};">
-                <span class="filiere-dot" style="background:${f.hex};"></span>
-                ${f.name}
-              </span>
-            </td>
-            <td>
-              <select ${!team.active || !sport.initialized ? "disabled" : ""} onchange="updateTeamStageManual('${escapeJsString(team.id)}', this.value)">
+              <select ${!team.active || !sport.initialized ? "disabled" : ""} aria-label="Stade atteint par ${escapeHtml(team.name)}" onchange="updateTeamStageManual('${escapeJsString(team.id)}', this.value)">
                 ${Object.keys(STAGE_LABELS).filter(stKey => {
                   if (stKey === "POULE" || stKey === "FINALE" || stKey === "GAGNANT") return true;
                   if (stKey === "HUITIEME") return (sport.matches || []).some(m => m.phase === "HUITIEME");
@@ -876,11 +975,11 @@
                 `).join("")}
               </select>
             </td>
-            <td><b>${stagePts} pt(s)</b></td>
+            <td class="num-cell">${stagePts}<span class="num-unit">pt(s)</span></td>
             <td>
-              <input type="number" style="width:70px;" value="${bonusPts}" ${!team.active ? "disabled" : ""} onchange="updateTeamBonusManual('${escapeJsString(team.id)}', this.value)" />
+              <input type="number" style="width:70px;" value="${bonusPts}" aria-label="Bonus ou ajustement pour ${escapeHtml(team.name)}" ${!team.active ? "disabled" : ""} onchange="updateTeamBonusManual('${escapeJsString(team.id)}', this.value)" />
             </td>
-            <td style="font-weight:900; color:${f.hex}; font-size:1.15rem; text-align:right;">${total} pt(s)</td>
+            <td class="num-cell total-cell">${total}<span class="num-unit">pt(s)</span></td>
           </tr>
         `;
       }).join("");
@@ -891,15 +990,21 @@
       const mid = escapeJsString(m.id);
       const numScoreA = Number.isFinite(Number(m.scoreA)) && m.scoreA !== null && m.scoreA !== "" ? Number(m.scoreA) : "";
       const numScoreB = Number.isFinite(Number(m.scoreB)) && m.scoreB !== null && m.scoreB !== "" ? Number(m.scoreB) : "";
+      const teamA = activeTeams.find(t => t.id === m.teamAId);
+      const teamB = activeTeams.find(t => t.id === m.teamBId);
+      // Noms d'équipe réels pour les noms accessibles des champs de score
+      const nameA = teamA ? teamA.name : (m.placeholderA || "équipe A");
+      const nameB = teamB ? teamB.name : (m.placeholderB || "équipe B");
+
       const selectA = `
-        <select onchange="updateMatchTeam('${mid}', 'teamAId', this.value)">
+        <select onchange="updateMatchTeam('${mid}', 'teamAId', this.value)" aria-label="Équipe A du match ${m.order}">
           <option value="">${escapeHtml(m.placeholderA || "-- À déterminer --")}</option>
           ${activeTeams.map(t => `<option value="${escapeHtml(t.id)}" ${t.id === m.teamAId ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("")}
         </select>
       `;
 
       const selectB = `
-        <select onchange="updateMatchTeam('${mid}', 'teamBId', this.value)">
+        <select onchange="updateMatchTeam('${mid}', 'teamBId', this.value)" aria-label="Équipe B du match ${m.order}">
           <option value="">${escapeHtml(m.placeholderB || "-- À déterminer --")}</option>
           ${activeTeams.map(t => `<option value="${escapeHtml(t.id)}" ${t.id === m.teamBId ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("")}
         </select>
@@ -907,52 +1012,62 @@
 
       return `
         <tr class="admin-match-row">
-          <td class="admin-match-cell-order" style="font-weight:900;">Match #${m.order} ${isKnockout ? `• <b>${escapeHtml(m.label)}</b>` : ""}</td>
+          <td class="admin-match-cell-order">Match #${m.order}${isKnockout ? ` (${escapeHtml(m.label)})` : ""}</td>
           <td class="admin-match-cell-meta">
-            <div style="display:flex; gap:0.5rem; align-items:center;">
-              <span style="font-size:0.8rem; color:var(--text-muted); font-weight:700;">🕒 Heure:</span>
+            <label class="match-field-label">
+              Heure
               <input type="time" value="${escapeHtml(m.time)}" onchange="updateMatchField('${mid}', 'time', this.value)" />
-            </div>
-            <div style="display:flex; gap:0.5rem; align-items:center;">
-              <span style="font-size:0.8rem; color:var(--text-muted); font-weight:700;">📍 Terrain:</span>
-              <input type="text" value="${escapeHtml(m.pitch)}" style="width:130px;" onchange="updateMatchField('${mid}', 'pitch', this.value)" />
-            </div>
+            </label>
+            <label class="match-field-label">
+              Terrain
+              <input type="text" value="${escapeHtml(m.pitch)}" style="width:120px;" onchange="updateMatchField('${mid}', 'pitch', this.value)" />
+            </label>
           </td>
           <td class="admin-match-cell-teama">
-            <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; margin-bottom:2px;">Équipe A :</div>
-            ${selectA}
+            <label class="match-field-label">
+              Équipe A
+              ${selectA}
+            </label>
           </td>
-          <td class="admin-match-cell-score" style="text-align:center; white-space:nowrap;">
-            <input type="number" min="0" class="score-input" placeholder="-" value="${numScoreA}" onchange="updateMatchScore('${mid}', 'scoreA', this.value)" />
-            <span style="font-weight:900; font-size:1.3rem; margin:0 6px;">:</span>
-            <input type="number" min="0" class="score-input" placeholder="-" value="${numScoreB}" onchange="updateMatchScore('${mid}', 'scoreB', this.value)" />
+          <td class="admin-match-cell-score">
+            <input type="number" min="0" inputmode="numeric" class="score-input" placeholder="-" value="${numScoreA}"
+              aria-label="Score de ${escapeHtml(nameA)}" onchange="updateMatchScore('${mid}', 'scoreA', this.value)" />
+            <span class="score-colon" aria-hidden="true">:</span>
+            <input type="number" min="0" inputmode="numeric" class="score-input" placeholder="-" value="${numScoreB}"
+              aria-label="Score de ${escapeHtml(nameB)}" onchange="updateMatchScore('${mid}', 'scoreB', this.value)" />
           </td>
           <td class="admin-match-cell-teamb">
-            <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; margin-bottom:2px;">Équipe B :</div>
-            ${selectB}
+            <label class="match-field-label">
+              Équipe B
+              ${selectB}
+            </label>
           </td>
           <td class="admin-match-cell-referee">
-            <div style="font-size:0.8rem; color:var(--text-muted); font-weight:700; margin-bottom:2px;">🦺 Arbitre :</div>
-            <input type="text" placeholder="Nom de l'arbitre..." value="${escapeHtml(m.referee || "")}" style="width:100%;" onchange="updateMatchField('${mid}', 'referee', this.value)" />
+            <label class="match-field-label">
+              Arbitre
+              <input type="text" placeholder="Nom de l'arbitre..." value="${escapeHtml(m.referee || "")}" onchange="updateMatchField('${mid}', 'referee', this.value)" />
+            </label>
           </td>
         </tr>
       `;
     }
 
-    // Helper : Ligne de course Relais
+    // Helper : Ligne de course Relais (une ligne par couloir)
     function renderRaceRow(m, activeTeams) {
       const mid = escapeJsString(m.id);
       const lanesEditors = (m.raceTeamIds || []).map((tid, laneIdx) => {
         const resVal = (m.raceResults && tid && m.raceResults[tid]) ? m.raceResults[tid] : "";
         const safeTid = escapeJsString(tid || "");
+        const laneTeam = activeTeams.find(t => t.id === tid);
+        const laneResultLabel = laneTeam ? `Résultat de ${laneTeam.name}` : `Résultat couloir ${laneIdx + 1}`;
         return `
-          <div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.35rem;">
-            <span style="font-size:0.78rem; font-weight:800; width:65px;">C${laneIdx + 1}:</span>
-            <select onchange="updateRaceLaneTeam('${mid}', ${laneIdx}, this.value)">
+          <div class="race-lane-row">
+            <span class="race-lane-tag" aria-hidden="true">C${laneIdx + 1}</span>
+            <select aria-label="Couloir ${laneIdx + 1} : équipe" onchange="updateRaceLaneTeam('${mid}', ${laneIdx}, this.value)">
               <option value="">-- Vide --</option>
               ${activeTeams.map(t => `<option value="${escapeHtml(t.id)}" ${t.id === tid ? "selected" : ""}>${escapeHtml(t.name)}</option>`).join("")}
             </select>
-            <input type="text" placeholder="Rang ou Temps" value="${escapeHtml(resVal)}" style="width:110px;"
+            <input type="text" placeholder="Rang ou temps" aria-label="${escapeHtml(laneResultLabel)}" value="${escapeHtml(resVal)}" style="width:110px;"
               onchange="updateRaceResult('${mid}', '${safeTid}', this.value)" />
           </div>
         `;
@@ -960,12 +1075,24 @@
 
       return `
         <tr>
-          <td style="font-weight:900;">${m.order}</td>
-          <td><input type="time" value="${escapeHtml(m.time)}" onchange="updateMatchField('${mid}', 'time', this.value)" /></td>
+          <td class="num-cell">${m.order}</td>
+          <td>
+            <label class="match-field-label">
+              Heure
+              <input type="time" value="${escapeHtml(m.time)}" onchange="updateMatchField('${mid}', 'time', this.value)" />
+            </label>
+          </td>
           <td><b>${escapeHtml(m.label)}</b></td>
-          <td><input type="text" value="${escapeHtml(m.pitch)}" style="width:140px;" onchange="updateMatchField('${mid}', 'pitch', this.value)" /></td>
+          <td>
+            <input type="text" value="${escapeHtml(m.pitch)}" style="width:130px;" aria-label="Terrain du match ${m.order}" onchange="updateMatchField('${mid}', 'pitch', this.value)" />
+          </td>
           <td colspan="2">${lanesEditors}</td>
-          <td><input type="text" placeholder="Chrono / Arbitre..." value="${escapeHtml(m.referee || "")}" onchange="updateMatchField('${mid}', 'referee', this.value)" /></td>
+          <td>
+            <label class="match-field-label">
+              Arbitre
+              <input type="text" placeholder="Chrono ou arbitre..." value="${escapeHtml(m.referee || "")}" onchange="updateMatchField('${mid}', 'referee', this.value)" />
+            </label>
+          </td>
         </tr>
       `;
     }
@@ -1041,11 +1168,18 @@
     }
 
     function handleInitializeSport() {
-      document.getElementById("init-modal").classList.remove("hidden");
+      const modalEl = document.getElementById("init-modal");
+      if (!modalEl) return;
+      initModalOpener = document.activeElement;
+      modalEl.classList.remove("hidden");
+      focusFirstInModal("init-modal");
     }
 
     function closeInitModal() {
-      document.getElementById("init-modal").classList.add("hidden");
+      const modalEl = document.getElementById("init-modal");
+      if (modalEl) modalEl.classList.add("hidden");
+      if (initModalOpener && initModalOpener.isConnected) initModalOpener.focus();
+      initModalOpener = null;
     }
 
     function confirmInitMode(mode) {
@@ -1090,33 +1224,33 @@
         return `
           <option value="2" ${qPerPool === 2 ? 'selected' : ''}>Top 2 / poule (➔ 4 qualifiés : Demi-finales directes) [Recommandé TIP]</option>
           <option value="4" ${qPerPool === 4 ? 'selected' : ''}>Top 4 / poule (➔ 8 qualifiés : Quarts de finale)</option>
-          <option value="8" ${qPerPool === 8 ? 'selected' : ''}>Top 8 / poule (➔ 16 qualifiés : 8èmes de finale 🏆)</option>
+          <option value="8" ${qPerPool === 8 ? 'selected' : ''}>Top 8 / poule (➔ 16 qualifiés : 8èmes de finale)</option>
           <option value="1" ${qPerPool === 1 ? 'selected' : ''}>Top 1 / poule (➔ 2 qualifiés : Grande Finale directe)</option>
         `;
       } else if (poolsCount === 4) {
         return `
           <option value="2" ${qPerPool === 2 ? 'selected' : ''}>Top 2 / poule (➔ 8 qualifiés : Quarts de finale)</option>
-          <option value="4" ${qPerPool === 4 ? 'selected' : ''}>Top 4 / poule (➔ 16 qualifiés : 8èmes de finale 🏆)</option>
+          <option value="4" ${qPerPool === 4 ? 'selected' : ''}>Top 4 / poule (➔ 16 qualifiés : 8èmes de finale)</option>
           <option value="1" ${qPerPool === 1 ? 'selected' : ''}>Top 1 / poule (➔ 4 qualifiés : Demi-finales directes)</option>
         `;
       } else if (poolsCount === 1) {
         return `
           <option value="4" ${qPerPool === 4 ? 'selected' : ''}>Top 4 (➔ Demi-finales directes)</option>
           <option value="8" ${qPerPool === 8 ? 'selected' : ''}>Top 8 (➔ Quarts de finale)</option>
-          <option value="16" ${qPerPool === 16 ? 'selected' : ''}>Top 16 (➔ 16 qualifiés : 8èmes de finale 🏆)</option>
+          <option value="16" ${qPerPool === 16 ? 'selected' : ''}>Top 16 (➔ 16 qualifiés : 8èmes de finale)</option>
           <option value="2" ${qPerPool === 2 ? 'selected' : ''}>Top 2 (➔ Grande Finale directe)</option>
         `;
       } else if (poolsCount === 3) {
         return `
           <option value="1" ${qPerPool === 1 ? 'selected' : ''}>1er de chaque poule + Meilleur 2e (➔ 4 qualifiés : Demi-finales)</option>
           <option value="2" ${qPerPool === 2 ? 'selected' : ''}>Top 2 de chaque poule + 2 Meilleurs (➔ 8 qualifiés : Quarts de finale)</option>
-          <option value="5" ${qPerPool === 5 ? 'selected' : ''}>Top 5 de chaque poule + 1 Meilleur (➔ 16 qualifiés : 8èmes de finale 🏆)</option>
+          <option value="5" ${qPerPool === 5 ? 'selected' : ''}>Top 5 de chaque poule + 1 Meilleur (➔ 16 qualifiés : 8èmes de finale)</option>
         `;
       } else {
         return `
           <option value="2" ${qPerPool === 2 ? 'selected' : ''}>Top 2 par poule</option>
           <option value="4" ${qPerPool === 4 ? 'selected' : ''}>Top 4 par poule</option>
-          <option value="8" ${qPerPool === 8 ? 'selected' : ''}>Top 8 par poule (➔ 8èmes de finale 🏆)</option>
+          <option value="8" ${qPerPool === 8 ? 'selected' : ''}>Top 8 par poule (➔ 8èmes de finale)</option>
           <option value="1" ${qPerPool === 1 ? 'selected' : ''}>Top 1 par poule</option>
         `;
       }
@@ -1166,13 +1300,13 @@
           </div>
           <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
             <button class="btn btn-sm" onclick="handleAutoDistributePools()" title="Répartit équitablement toutes les équipes actives dans les poules">
-              🪄 Répartir équitablement
+              Répartir équitablement
             </button>
             <button class="btn btn-sm btn-danger" onclick="handleClearPools()" title="Retire toutes les équipes des poules">
-              🗑️ Vider
+              Vider
             </button>
             <button class="btn btn-success" style="font-weight:800; padding:0.55rem 1.15rem; font-size:0.95rem; box-shadow:0 3px 10px rgba(16,185,129,0.3);" onclick="handleCompleteAndSchedule()">
-              ⚡ Compléter & Mettre en forme (Matchs & Horaires)
+              Compléter les matchs et les horaires
             </button>
           </div>
         </div>
@@ -1182,7 +1316,7 @@
           <div class="unassigned-card">
             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
               <span style="font-weight:800; color:var(--accent-warning); font-size:0.95rem;">
-                ⚠️ ${unassignedTeams.length} équipe(s) active(s) non encore assignée(s) :
+                ${unassignedTeams.length} équipe(s) active(s) non encore assignée(s) :
               </span>
               <span style="font-size:0.82rem; color:var(--text-muted);">
                 Choisissez une poule pour chacune ou cliquez sur <b>"Répartir équitablement"</b>
@@ -1196,7 +1330,7 @@
                     <span class="filiere-dot" style="background:${f.hex};"></span>
                     <b>${escapeHtml(t.name)}</b>
                     <select style="padding:0.2rem 0.4rem; font-size:0.8rem; background:var(--bg-input); color:var(--text-main); border:1px solid var(--border-color); border-radius:6px;" onchange="if(this.value){ handleAssignTeam('${escapeJsString(t.id)}', this.value); }">
-                      <option value="">👉 Assigner à...</option>
+                      <option value="">Assigner à...</option>
                       ${sport.pools.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("")}
                     </select>
                   </div>
@@ -1220,7 +1354,7 @@
                     </span>
                   </div>
                   ${sport.pools.length > 1 ? `
-                    <button class="btn btn-sm btn-danger" style="padding:0.2rem 0.5rem; font-size:0.75rem;" onclick="handleRemovePool('${escapeJsString(pool.id)}')" title="Supprimer cette ${poolWord.toLowerCase()}">✕</button>
+                    <button class="btn btn-sm btn-danger" style="padding:0.2rem 0.5rem; font-size:0.75rem;" onclick="handleRemovePool('${escapeJsString(pool.id)}')" title="Supprimer cette ${poolWord.toLowerCase()}" aria-label="Supprimer ${escapeHtml(pool.name)}">✕</button>
                   ` : ''}
                 </div>
 
@@ -1239,9 +1373,9 @@
                           <select style="padding:0.2rem 0.4rem; font-size:0.8rem; background:var(--bg-card); color:var(--text-main); border:1px solid var(--border-color); border-radius:6px;" onchange="handleAssignTeam('${escapeJsString(team.id)}', this.value)">
                             <option value="${escapeHtml(pool.id)}" selected>${escapeHtml(pool.name)}</option>
                             ${sport.pools.filter(p => p.id !== pool.id).map(p => `<option value="${escapeHtml(p.id)}">➔ ${escapeHtml(p.name)}</option>`).join("")}
-                            <option value="none">✕ Retirer</option>
+                            <option value="none">Retirer</option>
                           </select>
-                          <button class="btn btn-sm" style="padding:0.2rem 0.45rem; font-size:0.75rem;" onclick="handleRemoveTeam('${escapeJsString(team.id)}')" title="Retirer de la ${poolWord.toLowerCase()}">✕</button>
+                          <button class="btn btn-sm" style="padding:0.2rem 0.45rem; font-size:0.75rem;" onclick="handleRemoveTeam('${escapeJsString(team.id)}')" title="Retirer de la ${poolWord.toLowerCase()}" aria-label="Retirer ${escapeHtml(team.name)}">✕</button>
                         </div>
                       </div>
                     `;
@@ -1587,10 +1721,10 @@
       if (projBtn) {
         if (live.active) {
           projBtn.className = "btn btn-danger";
-          projBtn.innerHTML = "🔴 Masquer du Vidéoprojecteur";
+          projBtn.innerHTML = "Masquer du vidéoprojecteur";
         } else {
           projBtn.className = "btn btn-warning";
-          projBtn.innerHTML = "📺 Projeter Plein Écran (Live)";
+          projBtn.innerHTML = "Afficher sur vidéoprojecteur";
         }
       }
     }
@@ -1603,6 +1737,27 @@
       saveState(state);
       renderLiveScoreSection();
     }
+
+    // Échap ferme la modal de mot de passe puis init ; jamais le login obligatoire.
+    // Tab reste à l'intérieur de la modal ouverte.
+    document.addEventListener("keydown", (e) => {
+      const pwdModal = document.getElementById("pwd-modal");
+      const pwdOpen = pwdModal && !pwdModal.classList.contains("hidden");
+      const initModal = document.getElementById("init-modal");
+      const initOpen = initModal && !initModal.classList.contains("hidden");
+      const loginModal = document.getElementById("login-modal");
+      const loginOpen = loginModal && !loginModal.classList.contains("hidden");
+
+      if (e.key === "Escape") {
+        if (pwdOpen) closePasswordChangeModal();
+        else if (initOpen) closeInitModal();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      if (initOpen) trapTabInModal(e, initModal);
+      else if (pwdOpen) trapTabInModal(e, pwdModal);
+      else if (loginOpen) trapTabInModal(e, loginModal);
+    });
 
     document.addEventListener("DOMContentLoaded", () => {
       checkAuth();
@@ -1624,6 +1779,7 @@
 
       // Synchronisation initiale : ne pousser le localStorage vers le serveur que s'il est
       // réellement plus récent que l'état serveur (évite d'écraser les scores avec un état vide/périmé).
+      // Un état placeholder (navigateur vierge) ne doit jamais remplacer un tournoi serveur existant.
       if (window.location.protocol.startsWith("http")) {
         const localState = loadState();
         if (localState && localState.sports && Object.keys(localState.sports).length > 0) {
@@ -1633,7 +1789,19 @@
               const serverTs = serverState && typeof serverState.lastUpdated === "string" ? serverState.lastUpdated : null;
               const localTs = typeof localState.lastUpdated === "string" ? localState.lastUpdated : null;
               const serverEmpty = !serverState || !serverState.sports || Object.keys(serverState.sports).length === 0 || serverState.error;
+              // Mémorise l'existence (ou l'absence) du tournoi serveur pour les sauvegardes suivantes.
+              serverStateKnownToExist = serverEmpty ? false : true;
               if (serverEmpty || (localTs && (!serverTs || localTs > serverTs))) {
+                // Un placeholder local ne peut être poussé que sur un serveur explicitement vide.
+                // S'il existe déjà un tournoi serveur, on remplace le placeholder local par cet état réel.
+                if (localStateIsPlaceholder && !serverEmpty) {
+                  console.info("[TIP] Sync initiale : état local placeholder remplacé par l'état serveur.");
+                  localStateIsPlaceholder = false;
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(serverState));
+                  if (currentSportId) renderSportDetail();
+                  else renderDashboard();
+                  return;
+                }
                 fetch("/api/state", {
                   method: "POST",
                   headers: adminApiHeaders(),
@@ -1678,7 +1846,7 @@
       if (tableView) tableView.classList.toggle("hidden", chartMode);
       if (chartView) chartView.classList.toggle("hidden", !chartMode);
       if (button) {
-        button.textContent = chartMode ? "📋 Voir le tableau" : "📈 Voir le graphique";
+        button.textContent = chartMode ? "Voir le tableau" : "Voir le graphique";
       }
     }
 
@@ -1813,6 +1981,11 @@
     }
 
     function recordAdminScoreHistorySnapshot() {
+      // Ne pas enregistrer d'historique à partir d'un état placeholder vide.
+      if (localStateIsPlaceholder) {
+        console.info("[TIP] Snapshot historique admin ignoré : état local placeholder.");
+        return;
+      }
       const state = loadState();
       if (captureAdminScoreSnapshot(state, Date.now())) {
         saveState(state);
