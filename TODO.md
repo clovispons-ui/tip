@@ -1,5 +1,4 @@
 - Add animation when a team take over another one in "vidéo projecteur" page
-- On mobile phone change the order of displaying, I want show pom-pom alert displaying before the scores
 - Display of Admin
 - Humanize the website
 - Reduce the delay of actualisation
