@@ -57,11 +57,11 @@
           <tr>
             <th title="Rang">Rang</th>
             <th>Filière</th>
-            <th title="Football">Foot</th>
-            <th title="Basketball">Basket</th>
-            <th title="Volleyball">Volley</th>
-            <th title="Relais 4x100m">Relais</th>
-            <th title="Dodgeball">Dodge</th>
+            <th title="Football">⚽ Foot</th>
+            <th title="Basketball">🏀 Basket</th>
+            <th title="Volleyball">🏐 Volley</th>
+            <th title="Relais 4x100m">🏃‍♀️‍➡️ Relais</th>
+            <th title="Dodgeball">🤾 Dodge</th>
             <th title="Total">Total</th>
           </tr>
         </thead>
@@ -420,10 +420,11 @@
 
       tbody.innerHTML = standings.map((f, idx) => {
         const isTop = idx < 3;
+        const rankClass = isTop ? ` row-top rank-${idx + 1}` : "";
         const zeroClass = (v) => (v ? "" : " is-zero");
 
         return `
-          <tr class="filiere-row${isTop ? " row-top" : ""}">
+          <tr class="filiere-row${rankClass}">
             <td><div class="rank-badge-large">${idx + 1}</div></td>
             <td class="standings-filiere-cell">${renderFiliereBadge(f.name, f.id)}</td>
             <td class="sport-pts-cell${zeroClass(f.bySport.foot || 0)}">${f.bySport.foot || 0}</td>
@@ -431,7 +432,7 @@
             <td class="sport-pts-cell${zeroClass(f.bySport.volley || 0)}">${f.bySport.volley || 0}</td>
             <td class="sport-pts-cell${zeroClass(f.bySport.relais || 0)}">${f.bySport.relais || 0}</td>
             <td class="sport-pts-cell${zeroClass(f.bySport.dodgeball || 0)}">${f.bySport.dodgeball || 0}</td>
-            <td class="points-total-large">${f.totalPoints} <span class="pts-unit">pts</span></td>
+            <td class="points-total-large" style="--filiere-color: ${f.hex};">${f.totalPoints} <span class="pts-unit">pts</span></td>
           </tr>
         `;
       }).join("");
@@ -480,7 +481,7 @@
 
       const filterButtonsHtml = `
         <div class="filter-tabs">
-          <button class="tab-btn ${currentSportFilter === 'ALL' ? 'active' : ''}" style="--tab-accent: var(--accent-primary);" onclick="setSportFilter('ALL')">Tous les sports</button>
+          <button class="tab-btn tab-all ${currentSportFilter === 'ALL' ? 'active' : ''}" onclick="setSportFilter('ALL')">Tous les sports</button>
           <button class="tab-btn ${currentSportFilter === 'foot' ? 'active' : ''}" style="--tab-accent: ${getSportTheme('foot').color};" onclick="setSportFilter('foot')">Football</button>
           <button class="tab-btn ${currentSportFilter === 'basket' ? 'active' : ''}" style="--tab-accent: ${getSportTheme('basket').color};" onclick="setSportFilter('basket')">Basket</button>
           <button class="tab-btn ${currentSportFilter === 'volley' ? 'active' : ''}" style="--tab-accent: ${getSportTheme('volley').color};" onclick="setSportFilter('volley')">Volley</button>

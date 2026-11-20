@@ -182,28 +182,28 @@ const SPORT_THEMES = {
     id: "foot",
     name: "Football",
     icon: "⚽",
-    color: "#0284c7", // Bleu Océan / Sport
-    accent: "#38bdf8",
-    bgLight: "rgba(2, 132, 199, 0.12)",
-    border: "#0284c7"
+    color: "#16a34a", // Vert Pelouse
+    accent: "#4ade80",
+    bgLight: "rgba(22, 163, 74, 0.12)",
+    border: "#16a34a"
   },
   basket: {
     id: "basket",
     name: "Basketball",
     icon: "🏀",
-    color: "#ea580c", // Orange Basket
+    color: "#f97316", // Orange Basket
     accent: "#fb923c",
-    bgLight: "rgba(234, 88, 12, 0.12)",
-    border: "#ea580c"
+    bgLight: "rgba(249, 115, 22, 0.12)",
+    border: "#f97316"
   },
   volley: {
     id: "volley",
     name: "Volleyball",
     icon: "🏐",
-    color: "#2563eb", // Bleu Roi Volley
-    accent: "#60a5fa",
-    bgLight: "rgba(37, 99, 235, 0.12)",
-    border: "#2563eb"
+    color: "#0ea5e9", // Bleu Ciel Volley
+    accent: "#38bdf8",
+    bgLight: "rgba(14, 165, 233, 0.12)",
+    border: "#0ea5e9"
   },
   relais: {
     id: "relais",
@@ -218,10 +218,10 @@ const SPORT_THEMES = {
     id: "dodgeball",
     name: "Dodgeball",
     icon: "🤾",
-    color: "#7c3aed", // Violet Intense Dodgeball
-    accent: "#a78bfa",
-    bgLight: "rgba(124, 58, 237, 0.12)",
-    border: "#7c3aed"
+    color: "#a855f7", // Violet Clair Dodgeball
+    accent: "#c084fc",
+    bgLight: "rgba(168, 85, 247, 0.12)",
+    border: "#a855f7"
   }
 };
 

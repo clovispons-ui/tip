@@ -147,12 +147,17 @@
   --filiere-ekipbar: #334155;
   --filiere-admin: #f97316;
 
+  /* Métaux du podium (thème sombre) */
+  --rank-gold: #FFD166;
+  --rank-silver: #C8D2DC;
+  --rank-bronze: #C98550;
+
   /* Couleurs thématiques distinctes par Sport */
-  --sport-foot: #0284c7;
-  --sport-basket: #ea580c;
-  --sport-volley: #2563eb;
+  --sport-foot: #16a34a;
+  --sport-basket: #f97316;
+  --sport-volley: #0ea5e9;
   --sport-relais: #dc2626;
-  --sport-dodgeball: #7c3aed;
+  --sport-dodgeball: #a855f7;
 }
 
 body.light-mode {
@@ -184,6 +189,11 @@ body.light-mode {
   --accent-warning: var(--color-warning);
   --accent-danger: var(--color-error);
   --shadow: 0 16px 48px rgba(0, 0, 0, 0.32);
+
+  /* Métaux du podium (thème clair, assombris pour le contraste) */
+  --rank-gold: #9A6700;
+  --rank-silver: #5B6775;
+  --rank-bronze: #8A4B1F;
 }
 
 * {
@@ -702,7 +712,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   border-bottom: none;
 }
 
-/* RANG : texte condensé sobre, les 3 premiers sont plus gras, pas de médaille */
+/* RANG : chiffre sobre, le podium reçoit un cartouche métallique */
 .rank-badge-large {
   display: inline-block;
   font-family: var(--font-athletic);
@@ -716,9 +726,26 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   text-align: center;
 }
 
+.standings-table-large tr.rank-1 { --rank-color: var(--rank-gold); }
+.standings-table-large tr.rank-2 { --rank-color: var(--rank-silver); }
+.standings-table-large tr.rank-3 { --rank-color: var(--rank-bronze); }
+
 .standings-table-large tr.row-top .rank-badge-large {
-  color: var(--text-main);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--rank-color, transparent);
+  color: #0f172a;
   font-weight: 800;
+  width: 1.6em;
+  height: 1.6em;
+  padding: 0;
+  border-radius: 4px;
+}
+
+/* Sur fond clair les métaux sont foncés : chiffre en blanc */
+body.light-mode .standings-table-large tr.row-top .rank-badge-large {
+  color: #ffffff;
 }
 
 /* FILIÈRE : carré 10px + nom en encre (pas de pastille pleine) */
@@ -782,7 +809,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
   line-height: 1;
-  color: var(--text-main);
+  color: var(--filiere-color, var(--text-main));
   white-space: nowrap;
 }
 
@@ -835,6 +862,24 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   color: var(--text-main);
   font-weight: 800;
   border-bottom-color: var(--tab-accent, var(--accent-primary));
+}
+
+/* Onglet "Tous les sports" : filet en dégradé des cinq couleurs de sport */
+.tab-btn.tab-all.active {
+  border-bottom-color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    var(--sport-foot),
+    var(--sport-basket),
+    var(--sport-volley),
+    var(--sport-relais),
+    var(--sport-dodgeball)
+  );
+  background-repeat: no-repeat;
+  background-origin: border-box;
+  background-clip: border-box;
+  background-position: left bottom;
+  background-size: 100% 3px;
 }
 
 .matches-feed-projection {
